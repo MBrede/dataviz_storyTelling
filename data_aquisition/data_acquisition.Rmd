@@ -1,0 +1,160 @@
+---
+title: "acquisition"
+output:
+  # pdf_document:
+  #   includes:
+  #     in_header: header_doc.tex
+  html_document:
+    css: styles.css
+    fig_caption: true
+    toc: true
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+
+opts_chunk$set(echo = FALSE,message = F, fig.align = 'center')
+
+theme_set(theme_light())
+
+mc_key <- 'b5855902a85df2c10aa24712f6e0e972b476d800f31387a84f5661fab880e53e'
+```
+
+# Quellen für News-Artikel
+Wir wollen die Top-News-Seiten in Deutschland und Schweden ob ihrer thematischen Schwerpunktsetzung seit Beginn der Corona-Pandemie untersuchen.
+
+Um die Berichterstattung zu vergleichen, nutzen wir die über eine API zugängliche News-Datenbank [Mediacloud](https://mediacloud.org/#/Home). 
+Um aggregiert News-Betrachtung per Nation zu betrachten, bietet Mediacloud nationale Sammlungen an, die die meisten online-Outlets von mainstream-Media-Anbietern einer Nation zusammenfassen, so auch für [Schweden](https://sources.mediacloud.org/#/collections/34412223) und [Deutschland](https://sources.mediacloud.org/#/collections/38379816), die Sammlungen bestehen dabei aus den folgenden Inhalten:
+
+## Quellen {.tabset}
+
+### Schweden
+```{r}
+swe_sources <- read_csv('data/sweden.csv') %>% 
+  filter(language == 'sv') 
+
+swe_sources %>% 
+  select(URL = url,
+         Titel = name,
+         `Durchschnittliche Anzahl Artikel pro Tag` = stories_per_day) %>% 
+  arrange(desc(`Durchschnittliche Anzahl Artikel pro Tag`)) %>% 
+  DT::datatable()
+
+```
+
+
+
+### Deutschland
+
+```{r}
+ger_sources <- read_csv('data/germany.csv') %>% 
+  filter(language == 'de')
+  
+ger_sources %>% 
+  select(URL = url,
+         Titel = name,
+         `Durchschnittliche Anzahl Artikel pro Tag` = stories_per_day) %>% 
+  arrange(desc(`Durchschnittliche Anzahl Artikel pro Tag`)) %>% 
+  DT::datatable()
+```
+
+Der Spiegel steht komischerweise nicht in der Liste, deshalb fügen wir seine ID (`19831`) hinzu.
+
+
+```{r, include=F}
+save(list = ls(),file = 'pre_steps.RData')
+```
+
+
+## Texte
+
+Die URLs für die News-Stories werden dann über `httr`-Anfragen abgerufen:
+
+```{r, eval = T}
+
+library(httr)
+library(glue)
+library(slam)
+library(furrr)
+
+get_stories <- function(time_range,query,media_ids){
+  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/'
+  query_string <- glue('?q=text:', query)
+  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key)
+  resp <-
+    POST(
+      glue(
+        url,
+        '&fq=publish_day:', time_range,'&rows=1000&max_words=10000&stopword_length=long'
+      ),
+      body = jsonlite::toJSON(list(fq = list(media_id = media_ids)))
+    )
+  cont <- content(resp)
+  story_ids <- names(cont$word_matrix)
+  get_story <- function(story_id){
+    url <- glue(base_url,'single/', story_id, '?key=', mc_key)
+    content(GET(url)) %>% 
+      bind_cols() %>% 
+      mutate(across(everything(),
+                    ~as.character(.)))
+  }
+  v <- lapply(cont$word_matrix, unlist)
+  r_names <- story_ids
+  c_names <- map_chr(cont$word_list,~first(.))
+  if(length(v)>0){
+    list(
+      triplet =
+        simple_triplet_matrix(
+          i = unlist(map(seq_along(v),  ~ rep(., length(
+            v[[.]]
+          ))), use.names = F),
+          j = unlist(map(v,  ~ as.numeric(names(
+            .
+          ))), use.names = F) + 1,
+          v = unlist(v, use.names = F),
+          dimnames = list(rows = r_names,
+                          cols = c_names)
+        ),
+      story_info =
+        story_ids %>%
+        map_dfr( ~ get_story(.))
+    )
+  }else{
+    return(list())
+  }
+}
+
+weeks <- paste0('[',
+                as.Date('2020-01-01') +lubridate::weeks(c(0:51)),
+                'T00:00:00Z TO ',
+                as.Date('2020-01-01') +lubridate::weeks(c(1:52)),
+                'T00:00:00Z]')
+
+
+plan(multicore(workers = 8))
+
+swedish_stories <- weeks %>%
+  future_map( ~ get_stories(
+    .,
+    '(covid OR corona) AND (tyskland OR tysk)',
+    swe_sources$media_id
+  ),.progress = T)
+
+german_stories <- weeks %>%
+  future_map( ~ get_stories(
+    .,
+    '(covid OR corona) AND (schweden OR schwedisch)',
+    c(ger_sources$media_id,19831)
+  ), .progress = T)
+
+
+
+```
+```{r, include=F}
+load('data/collected_data.RData')
+```
+
+
+

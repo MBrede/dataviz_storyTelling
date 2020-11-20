@@ -1,0 +1,31 @@
+---
+title: "Visualisierung"
+output:
+  # pdf_document:
+  #   includes:
+  #     in_header: header_doc.tex
+  html_document:
+    css: styles.css
+    fig_caption: true
+    toc: true
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+
+opts_chunk$set(echo = FALSE,fig.align = 'center')
+
+theme_set(theme_light())
+```
+
+## Viz 1
+
+
+
+## Viz 2
+
+
+
+## Viz 3
