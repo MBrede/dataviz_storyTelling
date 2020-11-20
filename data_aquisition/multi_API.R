@@ -14,7 +14,7 @@ get_stories <- function(time_range,query,media_ids){
     POST(
       glue(
         url,
-        '&fq=publish_day:', time_range,'&rows=1000&max_words=10000&stopword_length=long'
+        '&fq=publish_day:', time_range,'&rows=2000&stopword_length=long'
       ),
       body = jsonlite::toJSON(list(fq = list(media_id = media_ids)))
     )
@@ -29,7 +29,7 @@ get_stories <- function(time_range,query,media_ids){
   }
   v <- lapply(cont$word_matrix, unlist)
   r_names <- story_ids
-  c_names <- map_chr(cont$word_list,~first(.))
+  c_names <- map_chr(cont$word_list,~nth(.,2))
   if(length(v)>0){
     list(
       triplet =

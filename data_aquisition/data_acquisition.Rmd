@@ -80,28 +80,19 @@ library(slam) # für die triplet-Matritzen
 library(furrr) # parallel-processing
 
 get_stories <- function(time_range,query,media_ids){
-  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/'# kern-Api-Adresse
-  
-  ## Doc-Term-Mat
-  query_string <- glue('?q=text:', query) # thematische Eingrenzung
-  
-  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key) # als doc-term matrix
-  
+  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/'
+  query_string <- glue('?q=text:', query)
+  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key)
   resp <-
     POST(
       glue(
         url,
-        '&fq=publish_day:', time_range,# zeitliche Eingrenzung
-        '&rows=1000&stopword_length=long' # bis zu 1000 Artikel, lange stopwords entfernen
+        '&fq=publish_day:', time_range,'&rows=2000&stopword_length=long'
       ),
-      body = jsonlite::toJSON(list(fq = list(media_id = media_ids))) # id_body
+      body = jsonlite::toJSON(list(fq = list(media_id = media_ids)))
     )
-  
-  cont <- content(resp) # body auslesen
-  
-  story_ids <- names(cont$word_matrix) # ids extrahieren
-  
-  ## story metadaten
+  cont <- content(resp)
+  story_ids <- names(cont$word_matrix)
   get_story <- function(story_id){
     url <- glue(base_url,'single/', story_id, '?key=', mc_key)
     content(GET(url)) %>% 
@@ -109,11 +100,9 @@ get_stories <- function(time_range,query,media_ids){
       mutate(across(everything(),
                     ~as.character(.)))
   }
-  
-  
   v <- lapply(cont$word_matrix, unlist)
   r_names <- story_ids
-  c_names <- map_chr(cont$word_list,~first(.))
+  c_names <- map_chr(cont$word_list,~nth(.,2))
   if(length(v)>0){
     list(
       triplet =
@@ -162,10 +151,73 @@ german_stories <- weeks %>%
 
 
 
+
 ```
 ```{r, include=F}
 load('data/collected_data.RData')
 ```
 
 
+Our text is tranlated with [http://translate.yandex.com](http://translate.yandex.com)
+
+```{r}
+library(translateR)
+
+first_non_na <- function(row){
+  first(row[which(!is.na(row))])
+}
+
+german_meta <- german_stories %>% 
+  .[which(map_lgl(.,~length(.)>1))] %>% 
+  map_dfr(~nth(.,2) %>% 
+            select(publish_date, guid, title, url,matches('stories_id'))) %>% 
+  rowwise() %>% 
+  mutate(stories_id = first_non_na(c_across(matches('stories')))) %>% 
+  select(-matches('stories_id.+')) %>% 
+  distinct
+
+merge_simple_triplets <- function(mat1,mat2){
+  word_tibble <- list(mat1, mat2) %>%
+    map_dfr(~ tibble(
+      story = .$dimnames$rows[.$i],
+      word = .$dimnames$cols[.$j],
+      count = .$v
+    )) %>%
+    mutate(i = as.numeric(as.factor(story)),
+           j = as.numeric(as.factor(word)))
+    return(simple_triplet_matrix(word_tibble$i,
+                                 word_tibble$j,
+                                 word_tibble$count,
+                                 dimnames = list(rows = sort(unique(word_tibble$story)),
+                                                 cols = sort(unique(word_tibble$word)))))
+  
+}
+
+combine_all_triplets <- function(triplets){
+  out <-  triplets[[1]]
+  for(i in 2:length(triplets)){
+    out <- merge_simple_triplets(out, triplets[[i]])
+  }
+  return(out)
+}
+
+# wie radikal wollen wir filtern? Eigentlich könnten wir mit den geplanten Schritten auch extrem radikal vorgehen.
+translate_and_remove_stoppers <- function(dtm){
+  log_idx <- str_detect(dtm$dimnames$cols,'[^[:alpha:]-]', negate = T) & 
+             str_count(dtm$dimnames$cols) > 3
+  dtm <- dtm[,log_idx]
+  translated_words <- translate(dtm$dimnames$cols)
+}
+
+
+german_doc_term <- german_stories %>% 
+  .[which(map_lgl(.,~length(.)>1))] %>%  
+  map(~first(.)) %>% 
+  combine_all_triplets()
+  
+
+
+ 
+
+```
 
