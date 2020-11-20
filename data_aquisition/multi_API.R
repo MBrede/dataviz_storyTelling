@@ -1,4 +1,4 @@
-load('/home/brede/fh_nextcloud/Data Science/dataViz/covid_story/pre_steps.RData')
+load('/home/brede/fh_nextcloud/Data Science/dataViz/covid_story/data/pre_steps.RData') 
 
 library(httr)
 library(glue)

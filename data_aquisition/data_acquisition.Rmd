@@ -32,7 +32,7 @@ Um aggregiert News-Betrachtung per Nation zu betrachten, bietet Mediacloud natio
 
 ### Schweden
 ```{r}
-swe_sources <- read_csv('data/sweden.csv') %>% 
+swe_sources <- read_csv('data/sweden.csv') %>% # Quellen von Schwedischen News
   filter(language == 'sv') 
 
 swe_sources %>% 
@@ -72,7 +72,7 @@ save(list = ls(),file = 'data/pre_steps.RData')
 
 Die URLs für die News-Stories werden dann über `httr`-Anfragen abgerufen:
 
-```{r, eval = T}
+```{r, eval = F}
 
 library(httr)
 library(glue)
