@@ -25,9 +25,41 @@ theme_set(theme_light())
 
 Vergleich Schweden Deutschland - Indizienden oder positiv-Tests oder relative Fallzahlen oder alles (timeseries) [Inzidenz- und Testdaten](https://covid.ourworldindata.org/data/owid-covid-data.csv)
 
+## Attaining the data
+For attaining the covid-19 policy data we read the data from the github of the
+[Coronavirus Government Response Tracker Project](https://www.bsg.ox.ac.uk/research/research-projects/coronavirus-government-response-tracker#data).
+
+```{r}
+# read policies csv-file
+policies <- read.csv('https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv')
+  
+```
+
+After reading the data, we take a glimpse on the data.
+```{r}
+# take a glimpse of the policy data
+glimpse(policies)
+```
+For the meanings of specific policies take a look on the [Codebook](https://github.com/OxCGRT/covid-policy-tracker/blob/master/documentation/codebook.md) of the project.
+
+
+The data set gets filtered for german policies and the relevant policies get selected.
+
 ```{r}
 
-policies <- read.csv('https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv')
+policies_ger <- policies %>%
+                filter(CountryName=='Germany') %>% # filter policies by germany
+                select(CountryCode, Date, C8_International.travel.controls,
+                       C6_Stay.at.home.requirements, C3_Cancel.public.events,
+                       C4_Restrictions.on.gatherings, H2_Testing.policy,
+                       H3_Contact.tracing) # select policies of interest
+  
+
+```
+
+```{r}
+# filter policies by sweden
+
 ```
 
 Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv) 
