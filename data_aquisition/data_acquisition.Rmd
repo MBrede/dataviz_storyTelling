@@ -49,7 +49,7 @@ swe_sources %>%
 ### Deutschland
 
 ```{r}
-ger_sources <- read_csv('data/germany.csv') %>% 
+ger_sources <- read_csv('data/germany.csv') %>% # Quellen von Deutschen News
   filter(language == 'de')
   
 ger_sources %>% 
@@ -74,25 +74,34 @@ Die URLs für die News-Stories werden dann über `httr`-Anfragen abgerufen:
 
 ```{r, eval = F}
 
-library(httr)
-library(glue)
-library(slam)
-library(furrr)
+library(httr) # für POST-requests
+library(glue) # weil Till die mag
+library(slam) # für die triplet-Matritzen
+library(furrr) # parallel-processing
 
 get_stories <- function(time_range,query,media_ids){
-  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/'
-  query_string <- glue('?q=text:', query)
-  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key)
+  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/'# kern-Api-Adresse
+  
+  ## Doc-Term-Mat
+  query_string <- glue('?q=text:', query) # thematische Eingrenzung
+  
+  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key) # als doc-term matrix
+  
   resp <-
     POST(
       glue(
         url,
-        '&fq=publish_day:', time_range,'&rows=1000&max_words=10000&stopword_length=long'
+        '&fq=publish_day:', time_range,# zeitliche Eingrenzung
+        '&rows=1000&stopword_length=long' # bis zu 1000 Artikel, lange stopwords entfernen
       ),
-      body = jsonlite::toJSON(list(fq = list(media_id = media_ids)))
+      body = jsonlite::toJSON(list(fq = list(media_id = media_ids))) # id_body
     )
-  cont <- content(resp)
-  story_ids <- names(cont$word_matrix)
+  
+  cont <- content(resp) # body auslesen
+  
+  story_ids <- names(cont$word_matrix) # ids extrahieren
+  
+  ## story metadaten
   get_story <- function(story_id){
     url <- glue(base_url,'single/', story_id, '?key=', mc_key)
     content(GET(url)) %>% 
@@ -100,6 +109,8 @@ get_stories <- function(time_range,query,media_ids){
       mutate(across(everything(),
                     ~as.character(.)))
   }
+  
+  
   v <- lapply(cont$word_matrix, unlist)
   r_names <- story_ids
   c_names <- map_chr(cont$word_list,~first(.))
