@@ -64,7 +64,7 @@ Der Spiegel steht komischerweise nicht in der Liste, deshalb fügen wir seine ID
 
 
 ```{r, include=F}
-save(list = ls(),file = 'pre_steps.RData')
+save(list = ls(),file = 'data/pre_steps.RData')
 ```
 
 

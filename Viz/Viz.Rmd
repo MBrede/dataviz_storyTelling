@@ -22,10 +22,15 @@ theme_set(theme_light())
 
 ## Viz 1
 
+Vergleich Schweden Deutschland - Indizienden oder positiv-Tests oder relative Fallzahlen oder alles (timeseries) [Inzidenz- und Testdaten](https://covid.ourworldindata.org/data/owid-covid-data.csv)
 
+Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv) 
 
 ## Viz 2
 
-
+Zeitreihen Zeitungsartikel 
 
 ## Viz 3
+
+
+
