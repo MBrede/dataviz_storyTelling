@@ -8,6 +8,8 @@ output:
     css: styles.css
     fig_caption: true
     toc: true
+csl: apa.csl
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -20,7 +22,7 @@ library(slam) # for memory efficient matrix-representations
 library(magrittr) #for additional pipes
 
 
-opts_chunk$set(echo = FALSE,message = F, fig.align = 'center', eval = F)
+opts_chunk$set(echo = T,message = F, fig.align = 'center', eval = F)
 
 theme_set(theme_light())
 
@@ -47,7 +49,7 @@ Since we do not have the necessary domain-knowledge to judge the validity of thi
 ```{r, eval = T}
 swe_sources <- read_csv('data/sweden.csv') %>% # Sources of Swedish news
   filter(language == 'sv') %>% 
-  select(media_id, url, name, stories_per_day)
+  select(media_id, url, name, stories_per_day, pub_state)
 
 swe_sources %>% 
   select(title = name,
@@ -71,11 +73,12 @@ We additionaly realized, that the Spiegel as one of Germanys largest outlets is 
 ```{r, eval = T}
 ger_sources <- read_csv('data/germany.csv') %>% # Sources of German News
   filter(language == 'de') %>%
-  select(media_id, url, name, stories_per_day) %>%
+  select(media_id, url, name, stories_per_day, pub_state) %>%
   bind_rows(tibble(media_id = 19831,
                    url = 'https://www.spiegel.de',
                    name = 'der Spiegel',
-                   stories_per_day = 82))
+                   stories_per_day = 82,
+                   pub_state = NA))
   
 ger_sources %>% 
   select(title = name,
@@ -252,8 +255,14 @@ swedish_meta <- swedish_stories %>%
 To combine the triplet-matrices, we need to define some helpers again. A simple row-binding of the matrices would not do, since every set of articles will have a seperate set of words. So we will need to use some R-trickery.
 
 ```{r}
-merge_simple_triplets <- function(mat1,mat2){ #combines two triplets into one
-  word_tibble <- list(mat1, mat2) %>%
+
+resolve_redundancies <- function(mat1,mat2=NULL){ #combines two triplets into one
+  if(is.null(mat2)){
+    input <- list(mat1)
+  }else{
+    input <- list(mat1, mat2)
+  }
+  word_tibble <- input %>%
     map_dfr(~ tibble(
       story = .$dimnames$rows[.$i],
       word = .$dimnames$cols[.$j],
@@ -269,12 +278,20 @@ merge_simple_triplets <- function(mat1,mat2){ #combines two triplets into one
   
 }
 
-combine_all_triplets <- function(triplets){ # iterative wrapper to combine all sets
+combine_all_triplets <- function(triplets, language){ # iterative wrapper to combine all sets
+  require(SnowballC)
   out <-  triplets[[1]]
   for(i in 2:length(triplets)){
-    out <- merge_simple_triplets(out, triplets[[i]])
+    out <- resolve_dedundancies(out, triplets[[i]])
   }
-  return(out)
+  # finally we'll stem it but save the original words
+  
+  stem_lex <- tibble(long_ver = out$dimnames$cols,
+                     stems = wordStem(long_ver, language = language)) %>% 
+    nest_by(stems)
+  out$dimnames$cols %<>% wordStem(language = language)
+  out %<>% resolve_redundancies()
+  return(list(dtm = out, stem_lex = stem_lex))
 }
 ```
 
@@ -283,29 +300,132 @@ These helpers can then be used to assemble our final matrices.
 ```{r}
 german_doc_term <- german_stories %>% 
   map(~first(.)) %>% 
-  combine_all_triplets() %T>%
-  write_rds('data/german_dtm.rds',
+  combine_all_triplets('german')
+
+
+write_rds(first(german_doc_term),
+            'data/german_dtm.rds',
             compress = 'gz') #save for later
+
+write_rds(nth(german_doc_term,2),
+            'data/german_stem_keys.rds',
+            compress = 'gz')
+
 
 
 swedish_doc_term <- swedish_stories %>% 
   map(~first(.)) %>% 
-  combine_all_triplets() %T>%
-  write_rds('data/swedish_dtm.rds',
+  combine_all_triplets('swedish') 
+
+
+write_rds(first(swedish_doc_term),
+            'data/swedish_dtm.rds',
             compress = 'gz') #save for later
+
+write_rds(nth(swedish_doc_term,2),
+            'data/swedish_stem_keys.rds',
+            compress = 'gz')
 ```
 
 
-## pre-processing for the text vizualisations
+## pre-processing for the text visualisations
 
 To end up with some nice and sensible results, we need to do some additional text-cleaning.
+The first step is to remove all unnecessary words, since there are a lot of in our context 'filler-words that are usefull for the reader but useless for our visualisations.
+
+As usual, we start by defining a helper-function to do our cleaning. We went with quite a radical solution, removing all words shorter than 4 symbols, all character-strings with non-letter contents and a high cutoff for the term frequency - inverse document frequency value, a value indicating how important each word is to individual documents in the corpus. This indicator is the product of the average term-frequency $$tf_t = {1\over N_d}\sum_{d=1}^{N_d} tf_{t, d}$$ where $N_d$ is the total amount of documents in the corpus and  $$tf_{t, d} = {f_{t,d}\over{\sum_{i=1}^{N_t}f_{i, d}}}$$ where $t$ is a given term, $N_t$ is the total number of terms in the corpus and $f_{t,d}$ is the frequency of a given term in a given document with the inverse document frequency $$idf_{t,D} = \log{ {N_d}\over{|\{d \in D : t \in d\}|}}$$ where  $|\{d \in D : t \in d\}|$ is the number of documents that mention the respective term at least once.
+ 
+
+```{r, eval = T}
+
+remove_stoppers <- function(dtm, language = 'german'){
+  require(tm) # for the stopwords
+  require(SnowballC)
+  
+  log_idx <- str_detect(dtm$dimnames$cols,'[^[:alpha:]]', negate = T) & 
+             str_count(dtm$dimnames$cols) > 3 &
+             !(dtm$dimnames$cols %in% wordStem(stopwords(language),language = language))
+  
+  dtm %<>% .[,log_idx]
+  
+  TF_IDF <-  tapply(dtm$v/row_sums(dtm)[dtm$i], dtm$j, mean) *  log(dtm$nrow/col_sums(dtm > 0))
+  dtm %<>% .[,TF_IDF > 1.75 * median(TF_IDF)] #arbitrary cutoff
+  dtm
+}
+```
+
+This filter-function is then applied to both matrices:
+
+```{r, eval = T}
+swedish_dtm <- read_rds('data/swedish_dtm.rds') %>% 
+  remove_stoppers(language = 'swedish')
+
+german_dtm <- read_rds('data/german_dtm.rds') %>% 
+  remove_stoppers(language = 'german')
+```
+## sentiments{.tabset}
+
+For the second of our visualisations we now need to  determine the sentiment for the terms left in our corpus. 
+
+### Swedish
+
+For the Swedish set, we will use a dicionary provided by github user [AlexGustafsson](https://github.com/AlexGustafsson which is available [here](https://github.com/AlexGustafsson/sentiment-swedish/blob/develop/build/AFINN-sv-165.txt).
+
+```{r, eval = T}
+swedish_word_freq <- swedish_dtm %$%
+  tibble(word = dimnames$cols[j],
+         n = v) %>% 
+  group_by(word) %>% 
+  summarise(n = sum(n))
+
+swe_sent <- read_lines('https://raw.githubusercontent.com/AlexGustafsson/sentiment-swedish/develop/build/AFINN-sv-165.txt')
+
+swe_sent <- tibble(
+  word = str_remove(swe_sent, '\\s\\-?\\d$'),
+  sentiment = as.numeric(str_extract(swe_sent, '\\-?\\d$'))) %>% 
+  mutate(sentiment = wordStem(word, language = 'swedish')) %>% 
+  right_join(swedish_word_freq,by = c('word' = 'word')) 
+
+swe_sent %>% 
+  skimr::skim()
+
+
+```
+
+### German
+For the German sentiments, we will use the SentiWS set [@remusSentiWSAPubliclyAvailable2010], as obtained from [here](https://www.kaggle.com/rtatman/german-sentiment-analysis-toolkit).
+
+```{r, eval = T}
+ german_word_freq<- german_dtm %$%
+  tibble(word = dimnames$cols[j],
+         n = v) %>% 
+  group_by(word) %>% 
+  summarise(n = sum(n))
+
+
+ger_sent <- read_tsv('data/german_sentis.txt', col_names = F) %>% 
+  select(1:2) %>% 
+  set_names(c('word', 'sentiment')) %>% 
+  mutate(word = str_remove(word, '\\|.+$'),
+         word = str_to_lower(word),
+         word = wordStem(word, language = 'german')) %>% 
+  right_join(german_word_freq,by = c('word' = 'word')) 
+
+
+ger_sent %>% 
+  skimr::skim()
+```
+
+
+## Übersetzen??
 
 ```{r}
 
 translate_with_mymemory <- function(word, from, to = 'en'){
   ret <- GET(glue('https://api.mymemory.translated.net/get?q=',
                   word, '&langpair=',
-                  from, '|', to))
+                  from, '|', to,
+                  '&de=max.brede@student.fh-kiel.de'))
   httr::content(ret)$matches %>% 
     map_dfr(~bind_cols(.) %>%  mutate(across(everything(), ~as.character(.)))) %>% 
     dplyr::slice(which.max(quality)) %>% 
@@ -314,15 +434,8 @@ translate_with_mymemory <- function(word, from, to = 'en'){
               translation,
               quality)
 }
-
-# wie radikal wollen wir filtern? Eigentlich könnten wir mit den geplanten Schritten auch extrem radikal vorgehen.
-remove_stoppers <- function(dtm, language = 'german'){
-  require(tm)
-  log_idx <- str_detect(dtm$dimnames$cols,'[^[:alpha:]-]', negate = T) & 
-             str_count(dtm$dimnames$cols) > 3 &
-             !(dtm$dimnames$cols %in% stopwords(language))
-  dtm[,log_idx]
-}
-
 ```
 
+
+
+## References
