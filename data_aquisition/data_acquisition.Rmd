@@ -11,56 +11,81 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-library(knitr)
-library(kableExtra)
-library(tidyverse)
+library(knitr) # import of stuff
+library(kableExtra) # nice tables
+library(tidyverse) # general handling
 
-opts_chunk$set(echo = FALSE,message = F, fig.align = 'center')
+library(glue) # for text-string handling
+library(slam) # for memory efficient matrix-representations
+library(magrittr) #for additional pipes
+
+
+opts_chunk$set(echo = FALSE,message = F, fig.align = 'center', eval = F)
 
 theme_set(theme_light())
 
-mc_key <- 'b5855902a85df2c10aa24712f6e0e972b476d800f31387a84f5661fab880e53e'
 ```
 
 # Quellen für News-Artikel
-Wir wollen die Top-News-Seiten in Deutschland und Schweden ob ihrer thematischen Schwerpunktsetzung seit Beginn der Corona-Pandemie untersuchen.
 
-Um die Berichterstattung zu vergleichen, nutzen wir die über eine API zugängliche News-Datenbank [Mediacloud](https://mediacloud.org/#/Home). 
-Um aggregiert News-Betrachtung per Nation zu betrachten, bietet Mediacloud nationale Sammlungen an, die die meisten online-Outlets von mainstream-Media-Anbietern einer Nation zusammenfassen, so auch für [Schweden](https://sources.mediacloud.org/#/collections/34412223) und [Deutschland](https://sources.mediacloud.org/#/collections/38379816), die Sammlungen bestehen dabei aus den folgenden Inhalten:
+We want to look at the German news reports about the Swedish Corona-response and vice versa.
 
-## Quellen {.tabset}
+To do this, we will use the after a free registration openly available [Mediacloud](https://mediacloud.org/#/Home) API to gather news-articles for the time frame since January of 2020.
 
-### Schweden
-```{r}
-swe_sources <- read_csv('data/sweden.csv') %>% # Quellen von Schwedischen News
-  filter(language == 'sv') 
+The API allows users to search for terms for a given set of news-media outlets in addition to some filter settings like a given time-frame and such. These queries can be sent to a whole range of API endpoints, including one that returns document term matrices and one that returns all gathered meta-information MediaCloud collected.
+
+Since we only want to look at german and swedish media outlets, we will be using two "Collections" of outlets as provided by Mediacloud. The selections we will be using are discussed in the following section.
+
+ 
+## Sources {.tabset}
+
+### Sweden
+We will use a collection of [Swedish](https://sources.mediacloud.org/#/collections/34412223) news-outlets with focus on local and national news as provided by Mediacloud. 
+
+Since we do not have the necessary domain-knowledge to judge the validity of this selection, we will use it unchanged except for a filter that removes any source who's main language is not swedish. The resulting selection consists of the outlets listed in table 1.
+
+```{r, eval = T}
+swe_sources <- read_csv('data/sweden.csv') %>% # Sources of Swedish news
+  filter(language == 'sv') %>% 
+  select(media_id, url, name, stories_per_day)
 
 swe_sources %>% 
-  select(URL = url,
-         Titel = name,
-         `Durchschnittliche Anzahl Artikel pro Tag` = stories_per_day) %>% 
-  arrange(desc(`Durchschnittliche Anzahl Artikel pro Tag`)) %>% 
-  DT::datatable()
+  select(title = name,
+         URL = url,
+         `average number of articles per day` = stories_per_day) %>% 
+  arrange(desc(`average number of articles per day`)) %>% 
+  DT::datatable(caption = 'Table 1: the selection of Swedish news-outlets used in our analysis.')
 
 ```
 
 
 
-### Deutschland
+### Germany
 
-```{r}
-ger_sources <- read_csv('data/germany.csv') %>% # Quellen von Deutschen News
-  filter(language == 'de')
+We will use a collection of [German](https://sources.mediacloud.org/#/collections/38379816) news-outlets with focus on local and national news as provided by Mediacloud. 
+
+After a superficial check of the sets validity, the presence of Russian outlets became aparent. But since these were correctly marked as being in Russian, they could be easily removed by filtering for German sources only. 
+
+We additionaly realized, that the Spiegel as one of Germanys largest outlets is missing from the collection, so we added it after searching the Mediacloud-Page for it's ID.
+
+```{r, eval = T}
+ger_sources <- read_csv('data/germany.csv') %>% # Sources of German News
+  filter(language == 'de') %>%
+  select(media_id, url, name, stories_per_day) %>%
+  bind_rows(tibble(media_id = 19831,
+                   url = 'https://www.spiegel.de',
+                   name = 'der Spiegel',
+                   stories_per_day = 82))
   
 ger_sources %>% 
-  select(URL = url,
-         Titel = name,
-         `Durchschnittliche Anzahl Artikel pro Tag` = stories_per_day) %>% 
-  arrange(desc(`Durchschnittliche Anzahl Artikel pro Tag`)) %>% 
-  DT::datatable()
+  select(title = name,
+         URL = url,
+         `average number of articles per day` = stories_per_day) %>% 
+  arrange(desc(`average number of articles per day`)) %>% 
+  DT::datatable(caption = 'Table 2: the selection of German news-outlets used in our analysis.')
 ```
 
-Der Spiegel steht komischerweise nicht in der Liste, deshalb fügen wir seine ID (`19831`) hinzu.
+
 
 
 ```{r, include=F}
@@ -68,44 +93,53 @@ save(list = ls(),file = 'data/pre_steps.RData')
 ```
 
 
-## Texte
+## data collection
 
-Die URLs für die News-Stories werden dann über `httr`-Anfragen abgerufen:
+We then use the collections to query the API for the matrices and the story-meta-information. To do this, we first build our query-function using httr:
 
-```{r, eval = F}
-
-library(httr) # für POST-requests
-library(glue) # weil Till die mag
-library(slam) # für die triplet-Matritzen
-library(furrr) # parallel-processing
+```{r}
 
 get_stories <- function(time_range,query,media_ids){
-  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/'
-  query_string <- glue('?q=text:', query)
-  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key)
+  require(httr) # GET and POST-requests
+  
+  base_url <- 'https://api.mediacloud.org/api/v2/stories_public/' # basic API-URL
+  
+  query_string <- glue('?q=text:', query) # add the query
+  
+  url <- glue(base_url,'word_matrix', query_string, '&key=', mc_key) # add the endpoint and the API-key
+  
   resp <-
     POST(
       glue(
         url,
-        '&fq=publish_day:', time_range,'&rows=2000&stopword_length=long'
+        '&publish_day=',time_range, # add time range
+        '&rows=2000&stopword_length=long' # add the short filters
       ),
-      body = jsonlite::toJSON(list(fq = list(media_id = media_ids)))
-    )
-  cont <- content(resp)
-  story_ids <- names(cont$word_matrix)
-  get_story <- function(story_id){
-    url <- glue(base_url,'single/', story_id, '?key=', mc_key)
-    content(GET(url)) %>% 
+      body = jsonlite::toJSON(list(fq = list(media_id = media_ids))) # add the longer filters
+    ) # POST the request
+  
+  cont <- content(resp) # get the response
+  
+  story_ids <- names(cont$word_matrix) # extract the row-indices to get the meta-data
+  
+  get_story <- function(story_id){ # helper function to query every story-id
+    url <- glue(base_url,'single/', story_id, '?key=', mc_key) # Endpoint and API-key
+    content(GET(url)) %>%  # Get the Meta-info and format it prettier
       bind_cols() %>% 
       mutate(across(everything(),
                     ~as.character(.)))
   }
-  v <- lapply(cont$word_matrix, unlist)
-  r_names <- story_ids
-  c_names <- map_chr(cont$word_list,~nth(.,2))
-  if(length(v)>0){
-    list(
-      triplet =
+  
+  v <- lapply(cont$word_matrix, unlist) # count per document as list of respective vectors
+  
+  r_names <- story_ids # doc-names for our doc-term matrix
+  
+  c_names <- map_chr(cont$word_list,
+                     ~nth(.,2)) # get the first non-stemmed term as the words for the doc-term matrix
+  
+  if(length(v)>0){ # check if there even is any word, i.e. if any article was collected
+    list( # return a list with
+      triplet = # a simple triplet that indicates every nun-zero combination of words and documents
         simple_triplet_matrix(
           i = unlist(map(seq_along(v),  ~ rep(., length(
             v[[.]]
@@ -117,21 +151,34 @@ get_stories <- function(time_range,query,media_ids){
           dimnames = list(rows = r_names,
                           cols = c_names)
         ),
-      story_info =
+      story_info = # and a tibble with all meta-information
         story_ids %>%
         map_dfr( ~ get_story(.))
     )
   }else{
-    return(list())
+    return(list()) # if there is no word in the matrix return an empty list
   }
 }
 
+```
+
+Since we are limiting every query to 2000 storys to reduce network-strain, we will send a query for every week in 2020. We therefore construct a vector of date-ranges.
+
+```{r}
 weeks <- paste0('[',
                 as.Date('2020-01-01') +lubridate::weeks(c(0:51)),
                 'T00:00:00Z TO ',
                 as.Date('2020-01-01') +lubridate::weeks(c(1:52)),
                 'T00:00:00Z]')
 
+```
+
+The last step is to define the actual query-terms. Since we want to see only the reportings about corona in which the respective other country is mentioned, we settled on the boolean combination of terms for corona and terms for the other nationality, i.e. `(covid OR corona) AND (tyskland OR tysk)` for Sweden and `(covid OR corona) AND (schweden OR schwedisch)` for Germany.
+
+Now everything is prepared to run our queries. Since we wanted it to run quickly, we cheated a bit and ran it in a separate script, but we used the following code:
+
+```{r}
+library(furrr) # parallel-processing
 
 plan(multicore(workers = 8))
 
@@ -146,37 +193,66 @@ german_stories <- weeks %>%
   future_map( ~ get_stories(
     .,
     '(covid OR corona) AND (schweden OR schwedisch)',
-    c(ger_sources$media_id,19831)
+    ger_sources$media_id
   ), .progress = T)
-
-
-
-
 ```
+
+
+
 ```{r, include=F}
 load('data/collected_data.RData')
 ```
 
+## the "reduce"-part {.tabset}
 
-Our text is tranlated with [http://translate.yandex.com](http://translate.yandex.com)
+The first step in processing the data is to remove all empty lists that indicate weeks with no articles whatsoever. This can be achieved with a simple filter:
 
 ```{r}
-library(translateR)
+
+german_stories %<>% .[which(map_lgl(.,  ~ length(.) > 1))]
+swedish_stories %<>% .[which(map_lgl(.,  ~ length(.) > 1))]
+
+```
+
+We then need to do some processing to end up with the datasets that we need.
+Since we used forked processing to gather our data, we have to combine it. The aim is to end up with four objects; one meta-tibble and one document-term matrix for each country.
+
+### meta-data
+
+To aggregate our our meta-datasets we first need to define a few helper-functions which mostly do a bit of cleaning since the resulting data-frames are a bit in-consistent.
+
+```{r}
 
 first_non_na <- function(row){
   first(row[which(!is.na(row))])
+} # a simple helper to reduce the strange amount of empty story-id columns
+
+extract_meta <- function(stories){ # a cleaner-function to end up with one streamlined meta-dataset for each country
+  stories %>%
+    map_dfr( ~ nth(., 2) %>%
+               select(publish_date, guid, title, url, matches('stories_id'))) %>%
+    rowwise() %>%
+    mutate(stories_id = first_non_na(c_across(matches('stories')))) %>%
+    select(-matches('stories_id.+')) %>%
+    distinct
 }
 
 german_meta <- german_stories %>% 
-  .[which(map_lgl(.,~length(.)>1))] %>% 
-  map_dfr(~nth(.,2) %>% 
-            select(publish_date, guid, title, url,matches('stories_id'))) %>% 
-  rowwise() %>% 
-  mutate(stories_id = first_non_na(c_across(matches('stories')))) %>% 
-  select(-matches('stories_id.+')) %>% 
-  distinct
+  extract_meta() %T>%
+  write_rds('data/german_meta.rds') #save for later
 
-merge_simple_triplets <- function(mat1,mat2){
+swedish_meta <- swedish_stories %>% 
+  extract_meta() %T>%
+  write_rds('data/swedish_meta.rds')#save for later
+
+```
+
+### Document-Term-Matrices
+
+To combine the triplet-matrices, we need to define some helpers again. A simple row-binding of the matrices would not do, since every set of articles will have a seperate set of words. So we will need to use some R-trickery.
+
+```{r}
+merge_simple_triplets <- function(mat1,mat2){ #combines two triplets into one
   word_tibble <- list(mat1, mat2) %>%
     map_dfr(~ tibble(
       story = .$dimnames$rows[.$i],
@@ -193,31 +269,60 @@ merge_simple_triplets <- function(mat1,mat2){
   
 }
 
-combine_all_triplets <- function(triplets){
+combine_all_triplets <- function(triplets){ # iterative wrapper to combine all sets
   out <-  triplets[[1]]
   for(i in 2:length(triplets)){
     out <- merge_simple_triplets(out, triplets[[i]])
   }
   return(out)
 }
+```
 
-# wie radikal wollen wir filtern? Eigentlich könnten wir mit den geplanten Schritten auch extrem radikal vorgehen.
-translate_and_remove_stoppers <- function(dtm){
-  log_idx <- str_detect(dtm$dimnames$cols,'[^[:alpha:]-]', negate = T) & 
-             str_count(dtm$dimnames$cols) > 3
-  dtm <- dtm[,log_idx]
-  translated_words <- translate(dtm$dimnames$cols)
+These helpers can then be used to assemble our final matrices.
+
+```{r}
+german_doc_term <- german_stories %>% 
+  map(~first(.)) %>% 
+  combine_all_triplets() %T>%
+  write_rds('data/german_dtm.rds',
+            compress = 'gz') #save for later
+
+
+swedish_doc_term <- swedish_stories %>% 
+  map(~first(.)) %>% 
+  combine_all_triplets() %T>%
+  write_rds('data/swedish_dtm.rds',
+            compress = 'gz') #save for later
+```
+
+
+## pre-processing for the text vizualisations
+
+To end up with some nice and sensible results, we need to do some additional text-cleaning.
+
+```{r}
+
+translate_with_mymemory <- function(word, from, to = 'en'){
+  ret <- GET(glue('https://api.mymemory.translated.net/get?q=',
+                  word, '&langpair=',
+                  from, '|', to))
+  httr::content(ret)$matches %>% 
+    map_dfr(~bind_cols(.) %>%  mutate(across(everything(), ~as.character(.)))) %>% 
+    dplyr::slice(which.max(quality)) %>% 
+    select(translation, quality) %>% 
+    transmute(word = word, 
+              translation,
+              quality)
 }
 
-
-german_doc_term <- german_stories %>% 
-  .[which(map_lgl(.,~length(.)>1))] %>%  
-  map(~first(.)) %>% 
-  combine_all_triplets()
-  
-
-
- 
+# wie radikal wollen wir filtern? Eigentlich könnten wir mit den geplanten Schritten auch extrem radikal vorgehen.
+remove_stoppers <- function(dtm, language = 'german'){
+  require(tm)
+  log_idx <- str_detect(dtm$dimnames$cols,'[^[:alpha:]-]', negate = T) & 
+             str_count(dtm$dimnames$cols) > 3 &
+             !(dtm$dimnames$cols %in% stopwords(language))
+  dtm[,log_idx]
+}
 
 ```
 
