@@ -16,7 +16,7 @@ library(knitr)
 library(kableExtra)
 library(tidyverse)
 
-opts_chunk$set(echo = FALSE,fig.align = 'center')
+opts_chunk$set(echo = TRUE,fig.align = 'center')
 
 theme_set(theme_light())
 ```
@@ -29,10 +29,9 @@ Vergleich Schweden Deutschland - Indizienden oder positiv-Tests oder relative Fa
 For attaining the covid-19 policy data we read the data from the github of the
 [Coronavirus Government Response Tracker Project](https://www.bsg.ox.ac.uk/research/research-projects/coronavirus-government-response-tracker#data).
 
-```{r}
+```{r, cache=TRUE}
 # read policies csv-file
 policies <- read.csv('https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv')
-  
 ```
 
 After reading the data, we take a glimpse on the data.
@@ -52,8 +51,49 @@ policies_ger <- policies %>%
                 select(CountryCode, Date, C8_International.travel.controls,
                        C6_Stay.at.home.requirements, C3_Cancel.public.events,
                        C4_Restrictions.on.gatherings, H2_Testing.policy,
-                       H3_Contact.tracing) # select policies of interest
+                       H3_Contact.tracing) %>% # select policies of interest
+                arrange(Date) # order rows by date
+
+#policy_intervals <- function(policy_data) {
   
+
+library(magrittr)
+
+travel_controls <- policies_ger %>% select(Date, C8_International.travel.controls)
+
+timeline_df <- data.frame('begin'=NA, 'end'=NA, 'category'=NA)
+
+travel_controls %<>% mutate(Date=as.Date(as.character(Date), format = "%Y%m%d"))
+
+travel_controls %>% group_by(C8_International.travel.controls)
+
+lagandlead
+
+# timeline_counter <- 1
+
+# last_row = -1
+# start = TRUE
+
+# for (row in 1:nrow(travel_controls)){
+#   # if policy changed
+#   if(travel_controls[row, 'C8_International.travel.controls'] != last_row){
+#     if(start){
+#       timeline_df[timeline_counter][timeline_counter] <- travel_controls[row,'C8_International.travel.controls']
+#       start <- FALSE
+#       timeline_counter <- timeline_counter + 1
+#     }
+#     last_row <- row
+#   }
+# }
+# 
+# travel_controls[row, 'C8_International.travel.controls']# == last_row
+
+```
+
+
+```{r}
+# convert numerical classes into text
+
 
 ```
 

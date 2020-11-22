@@ -430,8 +430,12 @@ summary {
 <div id="attaining-the-data" class="section level2">
 <h2>Attaining the data</h2>
 <p>For attaining the covid-19 policy data we read the data from the github of the <a href="https://www.bsg.ox.ac.uk/research/research-projects/coronavirus-government-response-tracker#data">Coronavirus Government Response Tracker Project</a>.</p>
+<pre class="r"><code># read policies csv-file
+policies &lt;- read.csv(&#39;https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv&#39;)</code></pre>
 <p>After reading the data, we take a glimpse on the data.</p>
-<pre><code>## Rows: 79,625
+<pre class="r"><code># take a glimpse of the policy data
+glimpse(policies)</code></pre>
+<pre><code>## Rows: 77,826
 ## Columns: 46
 ## $ CountryName                           &lt;chr&gt; &quot;Aruba&quot;, &quot;Aruba&quot;, &quot;Aruba&quot;, &quot;A...
 ## $ CountryCode                           &lt;chr&gt; &quot;ABW&quot;, &quot;ABW&quot;, &quot;ABW&quot;, &quot;ABW&quot;, &quot;...
@@ -481,6 +485,45 @@ summary {
 ## $ EconomicSupportIndexForDisplay        &lt;dbl&gt; 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,...</code></pre>
 <p>For the meanings of specific policies take a look on the <a href="https://github.com/OxCGRT/covid-policy-tracker/blob/master/documentation/codebook.md">Codebook</a> of the project.</p>
 <p>The data set gets filtered for german policies and the relevant policies get selected.</p>
+<pre class="r"><code>policies_ger &lt;- policies %&gt;%
+                filter(CountryName==&#39;Germany&#39;) %&gt;% # filter policies by germany
+                select(CountryCode, Date, C8_International.travel.controls,
+                       C6_Stay.at.home.requirements, C3_Cancel.public.events,
+                       C4_Restrictions.on.gatherings, H2_Testing.policy,
+                       H3_Contact.tracing) %&gt;% # select policies of interest
+                arrange(Date) # order rows by date
+
+#policy_intervals &lt;- function(policy_data) {
+  
+
+    
+  
+
+
+travel_controls &lt;- policies_ger %&gt;% select(Date, C8_International.travel.controls)
+
+timeline_df &lt;- data.frame(&#39;begin&#39;=NA, &#39;end&#39;=NA, &#39;category&#39;=NA)
+
+timeline_counter &lt;- 1
+
+last_row = -1
+start = TRUE
+
+# for (row in 1:nrow(travel_controls)){
+#   # if policy changed
+#   if(travel_controls[row, &#39;C8_International.travel.controls&#39;] != last_row){
+#     if(start){
+#       timeline_df[timeline_counter][timeline_counter] &lt;- travel_controls[row,&#39;C8_International.travel.controls&#39;]
+#       start &lt;- FALSE
+#       timeline_counter &lt;- timeline_counter + 1
+#     }
+#     last_row &lt;- row
+#   }
+# }
+# 
+# travel_controls[row, &#39;C8_International.travel.controls&#39;]# == last_row</code></pre>
+<pre class="r"><code># convert numerical classes into text</code></pre>
+<pre class="r"><code># filter policies by sweden</code></pre>
 <p>Zeitreihen in Facets, <a href="https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv">Massnahmen</a></p>
 </div>
 <div id="viz-2" class="section level2">
