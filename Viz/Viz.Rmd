@@ -49,44 +49,120 @@ The data set gets filtered for german policies and the relevant policies get sel
 policies_ger <- policies %>%
                 filter(CountryName=='Germany') %>% # filter policies by germany
                 select(CountryCode, Date, C8_International.travel.controls,
-                       C6_Stay.at.home.requirements, C3_Cancel.public.events,
-                       C4_Restrictions.on.gatherings, H2_Testing.policy,
-                       H3_Contact.tracing) %>% # select policies of interest
+                       C6_Stay.at.home.requirements,
+                       C4_Restrictions.on.gatherings)%>% # select policies of interest
+                mutate(Date=as.Date(as.character(Date),
+                                    format = "%Y%m%d")) %>% # change date format
+                na.omit() # remove rows with na entries
                 arrange(Date) # order rows by date
-
-#policy_intervals <- function(policy_data) {
-  
 
 library(magrittr)
 
-travel_controls <- policies_ger %>% select(Date, C8_International.travel.controls)
+travel_controls <- policies_ger %>%
+                      select(Date, C8_International.travel.controls)
 
-timeline_df <- data.frame('begin'=NA, 'end'=NA, 'category'=NA)
 
-travel_controls %<>% mutate(Date=as.Date(as.character(Date), format = "%Y%m%d"))
+bit_mask <- travel_controls[,'C8_International.travel.controls'] -  lag(travel_controls[,'C8_International.travel.controls'], n = 1) != 0
 
-travel_controls %>% group_by(C8_International.travel.controls)
+bit_mask[is.na(bit_mask)] <- TRUE
+start <- c()
+stop <- c()
 
-lagandlead
+start_holder <- TRUE
 
-# timeline_counter <- 1
+for(row in 1:length(bit_mask)){
+  # check whether it's a stop position
+  if(bit_mask[row] & !start_holder){
+    stop <- c(stop, row-1)
+    start_holder <- TRUE
+  }
+  # check whether it's a start position
+  if(bit_mask[row] & start_holder){
+    start <- c(start, row)
+    start_holder <- FALSE
+  }
+}
 
-# last_row = -1
-# start = TRUE
+stop <- c(stop, row)
+start_date <- travel_controls[start, 'Date']
+stop_date <- travel_controls[stop, 'Date']
+events <- travel_controls[start, 'C8_International.travel.controls']
 
-# for (row in 1:nrow(travel_controls)){
-#   # if policy changed
-#   if(travel_controls[row, 'C8_International.travel.controls'] != last_row){
-#     if(start){
-#       timeline_df[timeline_counter][timeline_counter] <- travel_controls[row,'C8_International.travel.controls']
-#       start <- FALSE
-#       timeline_counter <- timeline_counter + 1
-#     }
-#     last_row <- row
-#   }
-# }
-# 
-# travel_controls[row, 'C8_International.travel.controls']# == last_row
+
+
+
+stay_home_requirements <- policies_ger %>%
+                          select(Date, C6_Stay.at.home.requirements)
+
+
+bit_mask <- stay_home_requirements[,'C6_Stay.at.home.requirements'] -  lag(stay_home_requirements[,'C6_Stay.at.home.requirements'], n = 1) != 0
+
+bit_mask[is.na(bit_mask)] <- TRUE
+start <- c()
+stop <- c()
+
+start_holder <- TRUE
+
+for(row in 1:length(bit_mask)){
+  # check whether it's a stop position
+  if(bit_mask[row] & !start_holder){
+    stop <- c(stop, row-1)
+    start_holder <- TRUE
+  }
+  # check whether it's a start position
+  if(bit_mask[row] & start_holder){
+    start <- c(start, row)
+    start_holder <- FALSE
+  }
+}
+
+stop <- c(stop, row)
+start_date <- stay_home_requirements[start, 'Date']
+stop_date <- stay_home_requirements[stop, 'Date']
+events <- stay_home_requirements[start, 'C6_Stay.at.home.requirements']
+
+timeline_data <- data.frame(event = events, start = start_date, end = stop_date, group = "My Events")
+vistime(timeline_data)
+
+
+
+
+
+
+
+
+restriction_gatherings <- policies_ger %>%
+                          select(Date, C4_Restrictions.on.gatherings)
+
+
+bit_mask <- restriction_gatherings[,'C4_Restrictions.on.gatherings'] -  lag(restriction_gatherings[,'C4_Restrictions.on.gatherings'], n = 1) != 0
+
+bit_mask[is.na(bit_mask)] <- TRUE
+start <- c()
+stop <- c()
+
+start_holder <- TRUE
+
+for(row in 1:length(bit_mask)){
+  # check whether it's a stop position
+  if(bit_mask[row] & !start_holder){
+    stop <- c(stop, row-1)
+    start_holder <- TRUE
+  }
+  # check whether it's a start position
+  if(bit_mask[row] & start_holder){
+    start <- c(start, row)
+    start_holder <- FALSE
+  }
+}
+
+stop <- c(stop, row)
+start_date <- restriction_gatherings[start, 'Date']
+stop_date <- restriction_gatherings[stop, 'Date']
+events <- restriction_gatherings[start, 'C4_Restrictions.on.gatherings']
+
+timeline_data <- data.frame(event = events, start = start_date, end = stop_date, group = "My Events")
+vistime(timeline_data)
 
 ```
 
