@@ -89,6 +89,12 @@ stop_date <- travel_controls[stop, 'Date']
 events <- travel_controls[start, 'C8_International.travel.controls']
 
 
+timeline_data <- data.frame(event = events, start = start_date, end = stop_date,
+                            group = "International Travel Controls")
+vistime(timeline_data)
+
+
+
 
 
 stay_home_requirements <- policies_ger %>%
@@ -121,7 +127,11 @@ start_date <- stay_home_requirements[start, 'Date']
 stop_date <- stay_home_requirements[stop, 'Date']
 events <- stay_home_requirements[start, 'C6_Stay.at.home.requirements']
 
-timeline_data <- data.frame(event = events, start = start_date, end = stop_date, group = "My Events")
+timeline_data <- rbind(timeline_data, data.frame(event = events,
+                                                 start = start_date,
+                                                 end = stop_date,
+                                                 group = "Stay at Home"))
+
 vistime(timeline_data)
 
 
@@ -161,10 +171,33 @@ start_date <- restriction_gatherings[start, 'Date']
 stop_date <- restriction_gatherings[stop, 'Date']
 events <- restriction_gatherings[start, 'C4_Restrictions.on.gatherings']
 
-timeline_data <- data.frame(event = events, start = start_date, end = stop_date, group = "My Events")
+timeline_data <- rbind(timeline_data, data.frame(event = events,
+                                                 start = start_date,
+                                                 end = stop_date,
+                                                 group = "Gathering Restrictions"))
 vistime(timeline_data)
 
 ```
+
+
+```{r, cache=TRUE}
+# COVID-19 Timeline
+covid_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
+
+covid_data %<>% filter(location=='Germany' | location=='Sweden') %>% # filter policies by germany
+                select(location, date, new_cases_smoothed_per_million) %>% # select columns of interest
+                na.omit() %>% # remove rows with na entries              
+                mutate(date=as.Date(as.character(date),
+                                    format = "%Y-%m-%d")) # change date format
+
+covid_data %>% filter(location=='Germany') %>% ggplot(aes(x = date,
+                                                          y = new_cases_smoothed_per_million)) +
+  geom_area(color='black', fill = 'red', alpha = 0.5) +
+  labs(x = 'Date', y = 'Smoothed New Cases per Million')
+  #           alpha = 0.5, position = position_dodge(0.8)) +
+  # scale_color_manual(values = c("#00AFBB")) +
+  # scale_fill_manual(values = c("#00AFBB"))
+  ```
 
 
 ```{r}
@@ -187,4 +220,8 @@ Zeitreihen Zeitungsartikel
 ## Viz 3
 
 Wordclouds für interessante Zeitpunkte
+```{r}
+# read meta data for germany
+word_data <- readRDS('data/german_meta.rds')
 
+```
