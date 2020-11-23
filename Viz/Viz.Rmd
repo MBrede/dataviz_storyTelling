@@ -221,7 +221,27 @@ Zeitreihen Zeitungsartikel
 
 Wordclouds für interessante Zeitpunkte
 ```{r}
-# read meta data for germany
-word_data <- readRDS('data/german_meta.rds')
+library(tmap)
+library(sf)
+
+data(World, package = "tmap")  # load data from tmap package
+world <- World                 # rename
+
+se <- world %>% filter(name == "Sweden") %>% pull(geometry)
+plot(se, col='black')
+
+library(ggwordcloud)
+#> Loading required package: ggplot2
+data("love_words_small")
+data("love_words")
+
+set.seed(42)
+ggplot(love_words_small, aes(label = word, size = speakers)) +
+  geom_text_wordcloud_area(
+    mask = png::readPNG("./rplot.png"),
+    rm_outside = TRUE
+  ) +
+  scale_size_area(max_size = 18) +
+  theme_minimal()
 
 ```
