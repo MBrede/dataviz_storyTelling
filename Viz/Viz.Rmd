@@ -216,6 +216,32 @@ Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covi
 ## Viz 2
 
 Zeitreihen Zeitungsartikel 
+```{r}
+sentiment_time_series <- read_rds('data/documents_with_sentiments.rds') %>% 
+  mutate(publish_date = lubridate::as_date(as.Date(publish_date))) %>% 
+  group_by(country, publish_date) %>% 
+  summarise(sentiment = mean(m_sentiment),
+            `number of articles` = n()) %>% 
+  ungroup() %>%
+  group_by(country) %>% 
+  group_split() %>% 
+  map_dfr(~mutate(.,across(where(is.numeric),
+                           ~stats::filter(.,filter = dnorm(seq(-2,2,length.out = 7))/sum(dnorm(seq(-2,2,length.out = 7)))),
+                           .names = 'filter_{.col}'))) %>% 
+  rename('original_number of articles' = 'number of articles', 'original_sentiment' = sentiment) %>% 
+  pivot_longer(cols = where(is.numeric), values_to = 'value', names_to = c('quality','indicator'),names_sep = '_') %>% 
+  pivot_wider(names_from = quality,
+              values_from = value)
+
+sentiment_time_series %>% 
+  ggplot(aes(x = publish_date, y = original)) +
+  geom_point(color = 'blue', alpha = .25) +
+  geom_line(aes(y = filter), color = 'blue') +
+  facet_wrap(indicator ~ country,scales = 'free')
+  
+```
+
+
 
 ## Viz 3
 
