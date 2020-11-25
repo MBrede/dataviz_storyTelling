@@ -49,7 +49,7 @@ Since we do not have the necessary domain-knowledge to judge the validity of thi
 ```{r, eval = T}
 swe_sources <- read_csv('data/sweden.csv') %>% # Sources of Swedish news
   filter(language == 'sv') %>% 
-  select(media_id, url, name, stories_per_day, pub_state)
+  select(media_id, url, name,stories_per_day, pub_state)
 
 swe_sources %>% 
   select(title = name,
@@ -282,7 +282,7 @@ combine_all_triplets <- function(triplets, language){ # iterative wrapper to com
   require(SnowballC)
   out <-  triplets[[1]]
   for(i in 2:length(triplets)){
-    out <- resolve_dedundancies(out, triplets[[i]])
+    out <- resolve_redundancies(out, triplets[[i]])
   }
   # finally we'll stem it but save the original words
   
@@ -369,7 +369,7 @@ For the second of our visualisations we now need to  determine the sentiment for
 
 ### Swedish
 
-For the Swedish set, we will use a dicionary provided by github user [AlexGustafsson](https://github.com/AlexGustafsson which is available [here](https://github.com/AlexGustafsson/sentiment-swedish/blob/develop/build/AFINN-sv-165.txt).
+For the Swedish set, we will use a dicionary provided by github user [AlexGustafsson](https://github.com/AlexGustafsson) which is available [here](https://github.com/AlexGustafsson/sentiment-swedish/blob/develop/build/AFINN-sv-165.txt).
 
 ```{r, eval = T}
 swedish_word_freq <- swedish_dtm %$%
@@ -378,12 +378,17 @@ swedish_word_freq <- swedish_dtm %$%
   group_by(word) %>% 
   summarise(n = sum(n))
 
+swedish_word_freq %>% 
+  skimr::skim()
+
 swe_sent <- read_lines('https://raw.githubusercontent.com/AlexGustafsson/sentiment-swedish/develop/build/AFINN-sv-165.txt')
 
 swe_sent <- tibble(
   word = str_remove(swe_sent, '\\s\\-?\\d$'),
   sentiment = as.numeric(str_extract(swe_sent, '\\-?\\d$'))) %>% 
-  mutate(sentiment = wordStem(word, language = 'swedish')) %>% 
+  mutate(word = wordStem(word, language = 'swedish')) %>% 
+  group_by(word) %>% 
+  summarise(sentiment = mean(sentiment)) %>% 
   right_join(swedish_word_freq,by = c('word' = 'word')) 
 
 swe_sent %>% 
@@ -409,6 +414,8 @@ ger_sent <- read_tsv('data/german_sentis.txt', col_names = F) %>%
   mutate(word = str_remove(word, '\\|.+$'),
          word = str_to_lower(word),
          word = wordStem(word, language = 'german')) %>% 
+  group_by(word) %>% 
+  summarise(sentiment = mean(sentiment)) %>%
   right_join(german_word_freq,by = c('word' = 'word')) 
 
 
@@ -417,24 +424,217 @@ ger_sent %>%
 ```
 
 
-## Übersetzen??
+## tranlsation
+
+```{r, include= F}
+save(german_word_freq, swedish_word_freq, file = 'data/word_freqs.RData')
+```
+
+
+Since the non-english dictionaries we found are rather uncomplete, we'll try one version with translated words. This does mean though, that we can only look at a limited amout of terms since the translation-API we use is limited.
+
+Let's first define a helper function to use the [MyMemory](https://mymemory.translated.net/doc/spec.php) translation API.
 
 ```{r}
-
 translate_with_mymemory <- function(word, from, to = 'en'){
+  .GlobalEnv$translated <- 0
+  require(httr)
   ret <- GET(glue('https://api.mymemory.translated.net/get?q=',
                   word, '&langpair=',
                   from, '|', to,
                   '&de=max.brede@student.fh-kiel.de'))
-  httr::content(ret)$matches %>% 
-    map_dfr(~bind_cols(.) %>%  mutate(across(everything(), ~as.character(.)))) %>% 
-    dplyr::slice(which.max(quality)) %>% 
-    select(translation, quality) %>% 
-    transmute(word = word, 
-              translation,
-              quality)
+  out <- tryCatch({
+    content(ret)$matches %>%
+      map_dfr( ~ bind_cols(.) %>%  mutate(across(everything(), ~ as.character(.)))) %>%
+      dplyr::slice(which.max(quality)) %>%
+      select(translation, quality) %>%
+      transmute(word = word,
+                translation,
+                quality)
+  },
+  error = function(e) {
+    word
+  })
+  return(out)
+  
 }
 ```
+
+
+We'll then use this helper to translate the 5000 most used words in both matrices. (We used an external script again, but the code ist the same.)
+
+```{r}
+plan(multicore(workers = 8))
+
+german_keys <- read_rds('data/german_stem_keys.rds') 
+
+german_word_freq %<>% 
+  arrange(desc(n)) %>% 
+  slice(1:5000) %>%
+  left_join(german_keys, by = c('word' = 'stems')) %>% 
+  transmute(word,n,long = map_chr(data,~first(unlist(.)))) %>% 
+  mutate(tranlation = future_map(long, ~translate_with_mymemory(.,'de'),.progress = T))
+
+german_word_freq %>% 
+  write_rds('data/german_translated.rds', compress = 'gz')
+
+
+
+swedish_keys <- read_rds('data/swedish_stem_keys.rds') 
+
+swedish_word_freq %<>% 
+  arrange(desc(n)) %>% 
+  slice(1:5000) %>%
+  left_join(swedish_keys, by = c('word' = 'stems')) %>% 
+  transmute(word,n,long = map_chr(data,~first(unlist(.)))) %>% 
+  mutate(tranlation = future_map(long, ~translate_with_mymemory(.,'sv'), .progress = T))
+
+swedish_word_freq %>% 
+  write_rds('data/swedish_translated.rds', compress = 'gz')
+```
+
+
+Let's now see, how good the API really is (after doing some minor cleaning).
+
+```{r, eval =T}
+
+clean_myMemory <- function(translated_set){
+  translated_set %>% 
+    transmute(stem = `word`,
+              long,
+              translation = map_chr(tranlation,~tryCatch(.$translation, error = function(e){.})),
+              translation = str_to_lower(translation),
+              translation = str_remove_all(translation,'\\W'),
+              translation = str_trim(translation),
+              n) 
+}
+
+ger_tranlated <- read_rds('data/german_translated.rds') %>% 
+  clean_myMemory() #%T>% 
+  #write_csv('data/manually_cleaned_german.csv')
+  
+DT::datatable(ger_tranlated)
+
+swe_translated <-  read_rds('data/swedish_translated.rds')%>% 
+  clean_myMemory() #%T>%
+  #write_csv('data/manually_cleaned_swedish.csv') 
+
+DT::datatable(swe_translated)
+```
+
+Unfortunately, the quality of the translation is quite inconsistent. To tackle that, we conducted a manual correction of the 250 most common terms resulting csv in Excel.
+
+The last step is to
+
+  1. assign sentiment values to the keys
+  2. come back to the documents and add the sentiments to our meta data-frame
+  
+We will try to augment the English approach with the multilingual one but the results will be far from perfect.
+
+So let's first add sentiments using the sentiments as indicated in the [AFINN-set](http://www2.imm.dtu.dk/pubdb/pubs/6010-full.html) [@nielsenNewANEWEvaluation2011], (though it was originally intended for microblogging) and the `sentiments`-df from the `tidytext` package, which is the set as reported by @huMiningSummarizingCustomer2004. Since the sentiments in the latter are only indicated as 'positive' and 'negative', we need to transform this to the endpoints of the AFINN-set (-5,5). This is obviously a heavily skewed approach, but we need to accept imperfections at some point. We will use the higher resoluting AFINN-sentiments where we can though.
+
+```{r, eval = T}
+
+add_sentiments <- function(translated_set){
+  translated_set%>% 
+    left_join(read_tsv('data/AFINN-111.txt', col_names = c('term', 'sentiment')),
+              by = c('translation' = 'term')) %>% 
+    left_join(tidytext::sentiments, 
+              by = c('translation' = 'word')) %>% 
+    rename(sentiment_AFINN = sentiment.x, sentiment_tidytext = sentiment.y) %>% 
+    mutate(sentiment_tidytext = recode(sentiment_tidytext, "positive" = 5, 'negative' = -5),
+           sentiment = ifelse(is.na(sentiment_AFINN), sentiment_tidytext, sentiment_AFINN))
+}
+
+ger_tranlated <- read_csv('data/manually_cleaned_german.csv') %>% 
+  add_sentiments()
+
+swe_translated <- read_csv('data/manually_cleaned_swedish.csv') %>% 
+  add_sentiments()
+
+```
+The next step is to now combine these results with the multilingual approach (after scaling the German sentiments from that approach to the -5:5 scale). Since the two sentiment measurements are bound to differ, we'll average them wherever there are two values
+
+```{r, eval = T, cache=T}
+ger_sent %<>% 
+  mutate(sentiment = sentiment/max(abs(sentiment),na.rm = T) * 5) %>% 
+  left_join(ger_tranlated[,c('stem', 'sentiment')], by = c('word' = 'stem')) %>% 
+  rowwise() %>% 
+  mutate(sentiment = mean(c_across(matches('sentiment')), na.rm = T)) %>% 
+  select(word, sentiment, n)
+  
+
+skimr::skim(ungroup(ger_sent))
+
+
+swe_sent %<>% 
+  left_join(swe_translated[,c('stem', 'sentiment')], by = c('word' = 'stem')) %>% 
+  rowwise() %>% 
+  mutate(sentiment = mean(c_across(matches('sentiment')), na.rm = T)) %>% 
+  select(word, sentiment, n)
+
+skimr::skim(ungroup(swe_sent))
+
+```
+
+## merging and exporting the final sets
+
+For the two visualisations we had in mind we'll need two data sets. 
+
+1. the overall count and sentiment per country
+
+2. the timecourse for each country, including sentiments and article-counts
+
+
+The first one is easy, we just need to combine the sentiment sets we created in the last step:
+
+```{r}
+imap_dfr(list('Sweden' = swe_sent,
+              'Germany' = ger_sent),
+          ~mutate(.x, country = .y)) %>% 
+  write_rds('data/wordcloud_data.rds',compress = 'gz')
+```
+
+The second one is a bit more tricky, since we need to look up in the respective dtms, which document used which terms in which frequency to then average the respective sentiments. This sentiment-per-document-set can then be joined with the existing meta-data.
+
+```{r}
+get_sentiment_per_document <- function(dtm, sentiment){
+  
+  extract_counts <- function(id,dtm, sentiment){
+    tibble(n = dtm$v[dtm$i == which(dtm$dimnames$rows == id)],
+           term = dtm$dimnames$cols[dtm$j[dtm$i == which(dtm$dimnames$rows == id)]]) %>% 
+      left_join(sentiment[,1:2], by = c('term' = 'word')) %>% 
+      mutate(partial_sent = n * sentiment/sum(n)) %$% 
+      tibble(id = id,
+             m_sentiment = sum(sentiment, na.rm = T))
+  }
+  
+  map_dfr(dtm$dimnames$rows, ~extract_counts(., dtm, sentiment))
+}
+
+
+swe_sent_per_doc <- get_sentiment_per_document(swedish_dtm, swe_sent)
+ger_sent_per_doc <- get_sentiment_per_document(german_dtm, ger_sent)
+
+
+ger_part <- ger_sent_per_doc %>% 
+  mutate(country = 'Germany') %>% 
+  right_join(read_rds('data/german_meta.rds'), by=c('id' = 'stories_id')) %>% 
+  select(country, title,m_sentiment, publish_date, everything())
+  
+swe_part <- swe_sent_per_doc %>% 
+  mutate(country = 'Sweden') %>% 
+  right_join(read_rds('data/swedish_meta.rds'), by=c('id' = 'stories_id')) %>% 
+  select(country, title,m_sentiment, publish_date, everything())
+
+bind_rows(ger_part, swe_part) %>% 
+  write_rds('data/documents_with_sentiments.rds', compress = 'gz')
+
+
+
+```
+
+
 
 
 
