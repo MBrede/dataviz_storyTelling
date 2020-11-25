@@ -45,171 +45,194 @@ For the meanings of specific policies take a look on the [Codebook](https://gith
 The data set gets filtered for german policies and the relevant policies get selected.
 
 ```{r}
+# a function for pre filtering
 
-policies_ger <- policies %>%
-                filter(CountryName=='Germany') %>% # filter policies by germany
-                select(CountryCode, Date, C8_International.travel.controls,
-                       C6_Stay.at.home.requirements,
-                       C4_Restrictions.on.gatherings)%>% # select policies of interest
+filtering <- function(country_name, policy_filter) {
+   policies_ger <- policies %>%
+                filter(CountryName==country_name) %>% # filter policies by germany
+                select(policy_filter) %>% # select policies of interest
                 mutate(Date=as.Date(as.character(Date),
                                     format = "%Y%m%d")) %>% # change date format
-                na.omit() # remove rows with na entries
+                na.omit() %>% # remove rows with na entries
                 arrange(Date) # order rows by date
+}
+```
 
-library(magrittr)
+```{r}
+# a function to build start and stop labels for the equivalent policy
+build_start_stop_labels <- function(policies, policy, label){
+  # get selected policy data
+  selected_policy <- policies %>%
+                      select(Date, policy)
 
-travel_controls <- policies_ger %>%
-                      select(Date, C8_International.travel.controls)
+  # build bit-mask for policy changes
+  bit_mask <- selected_policy[,policy] -  lag(selected_policy[,policy], n = 1) != 0
 
+  # set last entry true (is na because of lag)
+  bit_mask[is.na(bit_mask)] <- TRUE
+  
+  # initialize start and stop list
+  start <- c()
+  stop <- c()
 
-bit_mask <- travel_controls[,'C8_International.travel.controls'] -  lag(travel_controls[,'C8_International.travel.controls'], n = 1) != 0
+  # initialize a state variable for tracking start position
+  start_state <- TRUE
 
-bit_mask[is.na(bit_mask)] <- TRUE
-start <- c()
-stop <- c()
-
-start_holder <- TRUE
-
-for(row in 1:length(bit_mask)){
-  # check whether it's a stop position
-  if(bit_mask[row] & !start_holder){
-    stop <- c(stop, row-1)
-    start_holder <- TRUE
+  # iterate through rows for finding start and stop positions
+  for(row in 1:length(bit_mask)){
+    # check whether it's a stop position
+    if(bit_mask[row] & !start_state){
+      stop <- c(stop, row-1)
+      start_state <- TRUE
+    }
+    # check whether it's a start position
+    if(bit_mask[row] & start_state){
+      start <- c(start, row)
+      start_state <- FALSE
+    }
   }
-  # check whether it's a start position
-  if(bit_mask[row] & start_holder){
-    start <- c(start, row)
-    start_holder <- FALSE
-  }
+
+  # add last row as stop
+  stop <- c(stop, row)
+  
+  # retrieve start and stop dates from the data set
+  start_date <- selected_policy[start, 'Date']
+  stop_date <- selected_policy[stop, 'Date']
+  # retrieve event number from the data set
+  events <- selected_policy[start, policy]
+  
+  # return dataframe with start/stop dates for the polcies
+  return(data.frame(event = events, start = start_date, end = stop_date,
+                    group = label))
 }
 
-stop <- c(stop, row)
-start_date <- travel_controls[start, 'Date']
-stop_date <- travel_controls[stop, 'Date']
-events <- travel_controls[start, 'C8_International.travel.controls']
+```
 
+```{r}
 
-timeline_data <- data.frame(event = events, start = start_date, end = stop_date,
-                            group = "International Travel Controls")
+# set germany as country
+country_name <- 'Germany'
+
+# set filter for columns of interest
+policy_filter <- c('CountryCode', 'Date', 'C8_International.travel.controls',
+  'C6_Stay.at.home.requirements', 'C4_Restrictions.on.gatherings')
+
+# retrieve policy data
+policies_ger <- filtering(country_name, policy_filter)
+
+# process policy data to a timeline
+timeline_data <- rbind(
+                       build_start_stop_labels(policies_ger,
+                                               'C8_International.travel.controls',
+                                               'International Travel Controls'),
+                       build_start_stop_labels(policies_ger,
+                                               'C6_Stay.at.home.requirements',
+                                               'Stay at Home'),
+                       build_start_stop_labels(policies_ger,
+                                               'C4_Restrictions.on.gatherings',
+                                               'Gathering Restrictions')
+                       )
+
+# load vistime
+library(vistime)
+
+# plot timeline
 vistime(timeline_data)
 
+```
 
+```{r}
 
+# set sweden as country
+country_name <- 'Sweden'
 
+# set filter for columns of interest
+policy_filter <- c('CountryCode', 'Date', 'C8_International.travel.controls',
+  'C6_Stay.at.home.requirements', 'C4_Restrictions.on.gatherings')
 
-stay_home_requirements <- policies_ger %>%
-                          select(Date, C6_Stay.at.home.requirements)
+# retrieve policy data
+policies_se <- filtering(country_name, policy_filter)
 
+# process policy data to a timeline
+timeline_data <- rbind(
+                       build_start_stop_labels(policies_se,
+                                               'C8_International.travel.controls',
+                                               'International Travel Controls'),
+                       build_start_stop_labels(policies_se,
+                                               'C6_Stay.at.home.requirements',
+                                               'Stay at Home'),
+                       build_start_stop_labels(policies_se,
+                                               'C4_Restrictions.on.gatherings',
+                                               'Gathering Restrictions')
+                       )
 
-bit_mask <- stay_home_requirements[,'C6_Stay.at.home.requirements'] -  lag(stay_home_requirements[,'C6_Stay.at.home.requirements'], n = 1) != 0
+# load vistime
+library(vistime)
 
-bit_mask[is.na(bit_mask)] <- TRUE
-start <- c()
-stop <- c()
-
-start_holder <- TRUE
-
-for(row in 1:length(bit_mask)){
-  # check whether it's a stop position
-  if(bit_mask[row] & !start_holder){
-    stop <- c(stop, row-1)
-    start_holder <- TRUE
-  }
-  # check whether it's a start position
-  if(bit_mask[row] & start_holder){
-    start <- c(start, row)
-    start_holder <- FALSE
-  }
-}
-
-stop <- c(stop, row)
-start_date <- stay_home_requirements[start, 'Date']
-stop_date <- stay_home_requirements[stop, 'Date']
-events <- stay_home_requirements[start, 'C6_Stay.at.home.requirements']
-
-timeline_data <- rbind(timeline_data, data.frame(event = events,
-                                                 start = start_date,
-                                                 end = stop_date,
-                                                 group = "Stay at Home"))
-
-vistime(timeline_data)
-
-
-
-
-
-
-
-
-restriction_gatherings <- policies_ger %>%
-                          select(Date, C4_Restrictions.on.gatherings)
-
-
-bit_mask <- restriction_gatherings[,'C4_Restrictions.on.gatherings'] -  lag(restriction_gatherings[,'C4_Restrictions.on.gatherings'], n = 1) != 0
-
-bit_mask[is.na(bit_mask)] <- TRUE
-start <- c()
-stop <- c()
-
-start_holder <- TRUE
-
-for(row in 1:length(bit_mask)){
-  # check whether it's a stop position
-  if(bit_mask[row] & !start_holder){
-    stop <- c(stop, row-1)
-    start_holder <- TRUE
-  }
-  # check whether it's a start position
-  if(bit_mask[row] & start_holder){
-    start <- c(start, row)
-    start_holder <- FALSE
-  }
-}
-
-stop <- c(stop, row)
-start_date <- restriction_gatherings[start, 'Date']
-stop_date <- restriction_gatherings[stop, 'Date']
-events <- restriction_gatherings[start, 'C4_Restrictions.on.gatherings']
-
-timeline_data <- rbind(timeline_data, data.frame(event = events,
-                                                 start = start_date,
-                                                 end = stop_date,
-                                                 group = "Gathering Restrictions"))
+# plot timeline
 vistime(timeline_data)
 
 ```
 
 
 ```{r, cache=TRUE}
-# COVID-19 Timeline
+# retrieve covid data from covid.ourworldindata.org git repository
 covid_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
 
+# filter for datasets of interest
 covid_data %<>% filter(location=='Germany' | location=='Sweden') %>% # filter policies by germany
-                select(location, date, new_cases_smoothed_per_million) %>% # select columns of interest
+                select(location, date,
+                       new_cases_smoothed_per_million) %>% # select columns of interest
                 na.omit() %>% # remove rows with na entries              
                 mutate(date=as.Date(as.character(date),
                                     format = "%Y-%m-%d")) # change date format
 
+```
+
+```{r}
+# retrieve german data from dataframe and plot
 covid_data %>% filter(location=='Germany') %>% ggplot(aes(x = date,
                                                           y = new_cases_smoothed_per_million)) +
   geom_area(color='black', fill = 'red', alpha = 0.5) +
   labs(x = 'Date', y = 'Smoothed New Cases per Million')
-  #           alpha = 0.5, position = position_dodge(0.8)) +
-  # scale_color_manual(values = c("#00AFBB")) +
-  # scale_fill_manual(values = c("#00AFBB"))
-  ```
-
-
-```{r}
-# convert numerical classes into text
-
 
 ```
 
 ```{r}
-# filter policies by sweden
+# retrieve swedish data from dataframe and plot
+covid_data %>% filter(location=='Sweden') %>% ggplot(aes(x = date,
+                                                          y = new_cases_smoothed_per_million)) +
+  geom_area(color='black', fill = 'red', alpha = 0.5) +
+  labs(x = 'Date', y = 'Smoothed New Cases per Million')
 
 ```
+```{r}
+# retrieve swedish data from dataframe and plot
+library(magrittr)
+covid_data %<>% filter(location=='Sweden'||location=='Germany')
+
+covid_data %>% filter(location=='Germany') %>%
+               rename('new_cases_smoothed_per_million_germany' =
+                      'new_cases_smoothed_per_million') -> covid_data_de
+
+covid_data %>% filter(location=='Sweden') %>%
+               rename('new_cases_smoothed_per_million_sweden' = 
+                      'new_cases_smoothed_per_million') -> covid_data_se
+
+
+# pivoz wider
+
+joined_covid_data <- full_join(covid_data_de, covid_data_se, by = 'date')  
+  
+ggplot(aes(x = date, y = new_cases_smoothed_per_million)) +
+  geom_area(color='black', fill = 'red', alpha = 0.5) +
+  labs(x = 'Date', y = 'Smoothed New Cases per Million')
+
+
+
+
+```
+
 
 Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv) 
 
