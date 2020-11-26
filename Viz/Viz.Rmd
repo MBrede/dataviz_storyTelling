@@ -16,7 +16,7 @@ library(knitr)
 library(kableExtra)
 library(tidyverse)
 
-opts_chunk$set(echo = TRUE,fig.align = 'center')
+opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F)
 
 theme_set(theme_light())
 ```
@@ -203,7 +203,6 @@ lineplot
 ```
 
 ```{r}
-install.packages('cowplot')
 library(cowplot)
 plot_grid(lineplot, time_line_plot,
           ncol = 1, align='v')
@@ -214,17 +213,17 @@ Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covi
 
 ## Viz 2
 
-Zeitreihen Zeitungsartikel 
-```{r}
+Since the crisis-response seems to be different and we got the impression of the use of sweden as a bad example in German media, we wanted to see, whether the reporting in both countries about the respective other differed as well. The first aspect we found interesting, was the amount of articles over time. 
+```{r, fig.cap='Total amount of articles per day concerning the respective country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 100.000.000 Inhabitants. All amounts are scaled, so that the relative maximum in the timeframe is set to 100% to render them comparable, since the absolute number of articles as well as the case numbers differ widely.', cache = T}
 sentiment_time_series <-
   read_rds('./../data/documents_with_sentiments.rds') %>%
   mutate(publish_date = lubridate::as_date(as.Date(publish_date))) %>%
   group_by(country, publish_date) %>%
-  summarise(sentiment = mean(m_sentiment),
-            `number of articles` = n()) %>%
+  summarise(`number of articles` = n()) %>%
   ungroup() %>%
   group_by(country) %>%
   group_split() %>%
+  map(~mutate(., across(where(is.numeric), ~ 100 * . / max(.)))) %>% 
   map_dfr( ~ mutate(., across(
     where(is.numeric),
     ~ stats::filter(., filter = dnorm(seq(-2, 2, length.out = 7)) /
@@ -233,8 +232,7 @@ sentiment_time_series <-
                       ))),
     .names = 'filter_{.col}'
   ))) %>%
-  rename('original_number of articles' = 'number of articles',
-         'original_sentiment' = sentiment) %>%
+  rename('original_number of articles' = 'number of articles') %>%
   pivot_longer(
     cols = where(is.numeric),
     values_to = 'value',
@@ -243,80 +241,209 @@ sentiment_time_series <-
   ) %>%
   pivot_wider(names_from = quality,
               values_from = value)
-
-sentiment_time_series %>% 
-  ggplot(aes(x = publish_date, y = original)) +
-  geom_point(color = 'blue', alpha = .25) +
-  geom_line(aes(y = filter), color = 'blue') +
-  facet_wrap(indicator ~ country,scales = 'free')
   
-```
 
+
+covid_data %<>% 
+  group_by(location) %>% 
+  group_split() %>% 
+  map_dfr(~mutate(., cases = 100 * new_cases_smoothed_per_million/max(new_cases_smoothed_per_million)))
+
+
+article_timeseries_viz <- 
+  sentiment_time_series %>% 
+  ggplot(aes(x = publish_date, y = original)) +
+  geom_point(color = scales::muted('blue'), alpha = .25) +
+  geom_line(aes(y = filter), color = scales::muted('blue')) +
+  facet_grid(rows = vars(country),scales = 'fixed') +
+  geom_line(data = covid_data, aes(y = cases, x = date, color = location)) +
+  scale_color_manual(values = COLORS) +
+  theme(legend.position = 'bottom') +
+  labs(x = 'date of pulication', 
+       y = 'number of articles in % of maximum',
+       color = 'corona case numbers') 
+  
+plotly::ggplotly(article_timeseries_viz) ### oder einfach nur ggplot?
+
+```
+In comparing these time-courses with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to losely be coupled to the amount of cases in the respective other country, we will look at the content of these reports.
 
 
 ## Viz 3
 
-Wordclouds für interessante Zeitpunkte
+Let's start by using the rather patchy sentiments we were able to gather to generate a few maps
+
+
 ```{r}
-library(tmap)
+library(eurostat)
 library(sf)
 
-data(World, package = "tmap")  # load data from tmap package
-world <- World                 # rename
-
-se <- world %>% filter(name == "Sweden") %>%
-                pull(geometry)
-
-
-png('sweden_shape.png')
-plot(se, col='black')
-dev.off()
+sf_data <- get_eurostat_geospatial(resolution = '10',
+                                   nuts = 3) %>%
+  filter(CNTR_CODE %in% c('SE')) %>%
+  bind_rows(get_eurostat_geospatial(resolution = '10',
+                                    nuts = 1) %>%
+              filter(CNTR_CODE %in% c('DE'))) %>% 
+  mutate(NAME_LATN = str_to_lower(NAME_LATN))
 
 
-library(ggwordcloud)
-#> Loading required package: ggplot2
-data("love_words_small")
-data("love_words")
+se_countrycodes <- read_tsv('https://www.iso.org/obp/ui/#iso:code:3166:SE')
 
-set.seed(42)
-ggplot(love_words, aes(label = word, size = speakers)) +
-  geom_text_wordcloud_area(
-    mask = png::readPNG("./sweden_shape.png"),
-    rm_outside = TRUE
-  ) +
-  scale_size_area(max_size = 18) +
-  theme_minimal()
+
+regional_sents <- read_rds('./../data/documents_with_sentiments.rds') %>% 
+  group_by(country) %>% 
+  group_split() %>% 
+  map_dfr(~group_by(.,pub_state,country) %>%  summarise(sentiment = mean(m_sentiment)))
 
 ```
+
+
+Now we need to cross-reference the Mediacloud countrycodes (ISO 3166:SE, ISO 3166:DE) with the `eurostat` ones:
+
 ```{r}
-library(tmap)
-library(sf)
+iso_3166 <- read_delim(
+  'Provinz;Code
+  Blekinge län;SE-K
+  Dalarnas län;SE-W
+  Gotlands län;SE-I
+  Gävleborgs län;SE-X
+  Hallands län;SE-N
+  Jämtlands län;SE-Z
+  Jönköpings län;SE-F
+  Kalmar län;SE-H
+  Kronobergs län;SE-G
+  Norrbottens län;SE-BD
+  Skåne län;SE-M
+  Stockholms län;SE-AB
+  Södermanlands län;SE-D
+  Uppsala län;SE-C
+  Värmlands län;SE-S
+  Västerbottens län;SE-AC
+  Västernorrlands län;SE-Y
+  Västmanlands län;SE-U
+  Västra Götalands län;SE-O
+  Örebro län;SE-T
+  Östergötlands län;SE-E
+  Baden-Württemberg;DE-BW
+  Bayern;DE-BY
+  Berlin;DE-BE
+  Brandenburg;DE-BB
+  Bremen;DE-HB
+  Hamburg;DE-HH
+  Hessen;DE-HE
+  Mecklenburg-Vorpommern;DE-MV
+  Niedersachsen;DE-NI
+  Nordrhein-Westfalen;DE-NW
+  Rheinland-Pfalz;DE-RP
+  Saarland;DE-SL
+  Sachsen;DE-SN
+  Sachsen-Anhalt;DE-ST
+  Schleswig-Holstein;DE-SH
+  Thüringen;DE-TH',
+  delim = ';'
+) %>% 
+  mutate(across(everything(), ~str_trim(.)))%>% 
+  mutate(Provinz = str_to_lower(Provinz))
 
-data(World, package = "tmap")  # load data from tmap package
-world <- World                 # rename
 
-se <- world %>% filter(name == "Germany") %>%
-                pull(geometry)
+regional_sents %<>%
+  right_join(iso_3166, by = c(pub_state = 'Code'))
 
 
-png('germany_shape.png')
-plot(se, col='black')
-dev.off()
-
-
-library(ggwordcloud)
-#> Loading required package: ggplot2
-data("love_words_small")
-data("love_words")
-
-set.seed(42)
-ggplot(love_words, aes(label = word, size = speakers)) +
-  geom_text_wordcloud_area(
-    mask = png::readPNG("./germany_shape.png"),
-    rm_outside = TRUE
-  ) +
-  scale_size_area(max_size = 18) +
-  xlim(-2.5,2.5) +
-  theme_void()
 
 ```
+
+This dataset can now be used to depict the overall regional sentiment in both countries:
+
+```{r}
+reg_sent_plot <- function(data,legend){
+  p <- ggplot(data) +
+    geom_sf(aes(geometry = geometry,fill = sentiment), color = 'grey', expand = F) +
+    scale_fill_gradient2(low = scales::muted('red'), 
+                         mid = 'white',
+                         high = scales::muted('blue'),
+                         na.value = 'lightgrey',
+                         limits = c(-5,5))  +
+    cowplot::theme_map()
+    if(!legend){
+      p <- p + theme(legend.position = 'none')
+    }else{
+      p <- p + theme_void() + theme(legend.position = 'right')
+    }
+  p +
+    coord_sf(crs = st_crs("+proj=merc"))
+}
+
+plots <- sf_data %>% 
+  left_join(regional_sents[,c('Provinz', 'sentiment')],by = c('NAME_LATN' = 'Provinz')) %>% 
+  group_by(CNTR_CODE) %>%
+  group_split() %>%
+  purrr::map(~reg_sent_plot(.,legend = F))
+
+legend <- cowplot::get_legend(reg_sent_plot(mutate(sf_data,sentiment = 0),legend = T))
+
+cowplot::plot_grid(
+  cowplot::plot_grid(plotlist = plots),
+  legend,
+  rel_widths =  c(4,.4)
+)
+
+ 
+```
+
+
+And finally, let's look at some wordclouds:
+
+
+```{r, cache = T}
+
+wc_data <- read_rds('./../data/wordcloud_data.rds')
+
+
+wordcloud <- function(wc_data,country){
+  require(ggwordcloud)
+  p <- get_eurostat_geospatial(resolution = '10',
+                                   nuts = 0) %>%
+    filter(CNTR_CODE %in% c(country)) %>% 
+    ggplot() +
+    geom_sf(fill = 'black', color = 'black') +
+    coord_sf(crs = st_crs("+proj=moll")) +
+    theme_void()
+  ggsave('temp.png', plot = p)
+  img <- png::readPNG('temp.png')
+  dummy <- colSums(img[,,1]) != max(colSums(img[,,1]))
+  img <- img[,dummy,]
+  dummy <- rowSums(img[,,1]) != max(rowSums(img[,,1]))
+  img <- img[dummy,,]
+  
+  wc <- ggplot(wc_data,aes(label = translation, size = n, color = sentiment)) + 
+    geom_text_wordcloud(mask = img,rm_outside = T)+
+    scale_color_gradient2(low = scales::muted('red'), 
+                         mid = 'grey',
+                         high = scales::muted('blue'),
+                         na.value = 'darkgrey',
+                         limits = c(-5,5))
+  file.remove('temp.png')
+  wc
+}
+ 
+ger_wc <- wc_data %>% 
+  filter(country == 'Germany') %>% 
+  arrange(desc(n)) %>% 
+  head(200) %>% 
+  wordcloud(country = 'DE')
+
+
+swe_wc <- wc_data %>% 
+  filter(country == 'Sweden') %>% 
+  arrange(desc(n)) %>% 
+  head(200) %>% 
+  wordcloud(country = 'SE')
+
+cowplot::plot_grid(ger_wc, swe_wc)
+
+```
+
+
+
+

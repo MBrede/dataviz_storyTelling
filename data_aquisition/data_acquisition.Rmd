@@ -233,7 +233,7 @@ first_non_na <- function(row){
 extract_meta <- function(stories){ # a cleaner-function to end up with one streamlined meta-dataset for each country
   stories %>%
     map_dfr( ~ nth(., 2) %>%
-               select(publish_date, guid, title, url, matches('stories_id'))) %>%
+               select(publish_date, guid, title, url,media_id, matches('stories_id'))) %>%
     rowwise() %>%
     mutate(stories_id = first_non_na(c_across(matches('stories')))) %>%
     select(-matches('stories_id.+')) %>%
@@ -369,7 +369,7 @@ For the second of our visualisations we now need to  determine the sentiment for
 
 ### Swedish
 
-For the Swedish set, we will use a dicionary provided by github user [AlexGustafsson](https://github.com/AlexGustafsson) which is available [here](https://github.com/AlexGustafsson/sentiment-swedish/blob/develop/build/AFINN-sv-165.txt).
+For the Swedish set, we will use a dictionary provided by github user [AlexGustafsson](https://github.com/AlexGustafsson) which is available [here](https://github.com/AlexGustafsson/sentiment-swedish/blob/develop/build/AFINN-sv-165.txt).
 
 ```{r, eval = T}
 swedish_word_freq <- swedish_dtm %$%
@@ -558,20 +558,20 @@ The next step is to now combine these results with the multilingual approach (af
 ```{r, eval = T, cache=T}
 ger_sent %<>% 
   mutate(sentiment = sentiment/max(abs(sentiment),na.rm = T) * 5) %>% 
-  left_join(ger_tranlated[,c('stem', 'sentiment')], by = c('word' = 'stem')) %>% 
+  left_join(ger_tranlated[,c('stem','translation', 'sentiment')], by = c('word' = 'stem')) %>% 
   rowwise() %>% 
   mutate(sentiment = mean(c_across(matches('sentiment')), na.rm = T)) %>% 
-  select(word, sentiment, n)
+  select(word, translation, sentiment, n)
   
 
 skimr::skim(ungroup(ger_sent))
 
 
 swe_sent %<>% 
-  left_join(swe_translated[,c('stem', 'sentiment')], by = c('word' = 'stem')) %>% 
+  left_join(swe_translated[,c('stem','translation', 'sentiment')], by = c('word' = 'stem')) %>% 
   rowwise() %>% 
   mutate(sentiment = mean(c_across(matches('sentiment')), na.rm = T)) %>% 
-  select(word, sentiment, n)
+  select(word,translation, sentiment, n)
 
 skimr::skim(ungroup(swe_sent))
 
@@ -620,11 +620,15 @@ ger_sent_per_doc <- get_sentiment_per_document(german_dtm, ger_sent)
 ger_part <- ger_sent_per_doc %>% 
   mutate(country = 'Germany') %>% 
   right_join(read_rds('data/german_meta.rds'), by=c('id' = 'stories_id')) %>% 
+  mutate(media_id = as.numeric(media_id)) %>% 
+  left_join(ger_sources[,c('media_id', 'pub_state')]) %>% 
   select(country, title,m_sentiment, publish_date, everything())
   
 swe_part <- swe_sent_per_doc %>% 
   mutate(country = 'Sweden') %>% 
   right_join(read_rds('data/swedish_meta.rds'), by=c('id' = 'stories_id')) %>% 
+  mutate(media_id = as.numeric(media_id)) %>% 
+  left_join(swe_sources[,c('media_id', 'pub_state')]) %>% 
   select(country, title,m_sentiment, publish_date, everything())
 
 bind_rows(ger_part, swe_part) %>% 

@@ -13,3 +13,8 @@ forcats
 vistime
 viridisLite
 viridis
+magrittr
+cowplot
+eurostat
+sf
+ggwordcloud
