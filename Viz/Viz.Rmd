@@ -1,5 +1,5 @@
 ---
-title: "Visualisierung"
+title: "Narrative Comparison during the COVID-19 Pandemic"
 output:
   # pdf_document:
   #   includes:
@@ -21,9 +21,17 @@ opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F)
 theme_set(theme_light())
 ```
 
-## Viz 1
+## Introduction
 
-Vergleich Schweden Deutschland - Indizienden oder positiv-Tests oder relative Fallzahlen oder alles (timeseries) [Inzidenz- und Testdaten](https://covid.ourworldindata.org/data/owid-covid-data.csv)
+During the COVID-19 pandemic different policies have been chosen by the countries
+to prevent a overloading of their health care system. Especially the country sweden
+has been known for choosing moderate policies. So that the question came up how 
+the press of other countries is reporting about sweden. And in reverse, how 
+sweden is reporting about other countries. We have choosen as a comparison
+Germany since it's the country we are from.
+
+First off we want to show how the situations of new confirmed cases and the
+corresponding policies differ between the two countries.
 
 ## Attaining the data
 For attaining the covid-19 policy data we read the data from the github of the
@@ -34,16 +42,9 @@ For attaining the covid-19 policy data we read the data from the github of the
 policies <- read.csv('https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv')
 ```
 
-After reading the data, we take a glimpse on the data.
-```{r}
-# take a glimpse of the policy data
-glimpse(policies)
-```
 For the meanings of specific policies take a look on the [Codebook](https://github.com/OxCGRT/covid-policy-tracker/blob/master/documentation/codebook.md) of the project.
 
-
-The data set gets filtered for german policies and the relevant policies get selected.
-
+A function for the data pre-filtering:
 ```{r}
 # a function for pre filtering
 
@@ -58,6 +59,9 @@ filtering <- function(country_name, policy_filter) {
 }
 ```
 
+
+The data has to be restructured for being possible to plot. So that's the
+function for doing that:
 ```{r}
 # a function to build start and stop labels for the equivalent policy
 build_start_stop_labels <- function(policies, policy, label){
@@ -108,15 +112,17 @@ build_start_stop_labels <- function(policies, policy, label){
 
 ```
 
+After that we build the timeline plot for the stay at home.
 ```{r}
 # set filter for columns of interest
 policy_filter <- c('CountryCode', 'Date', 'C8_International.travel.controls',
   'C6_Stay.at.home.requirements', 'C4_Restrictions.on.gatherings')
 
-# retrieve policy data
+# retrieve policy data for germany and sweden
 policies_ger <- filtering('Germany', policy_filter)
 policies_se <- filtering('Sweden', policy_filter)
 
+# rebuild data into start and stop labels
 timeline_data <- rbind(build_start_stop_labels(policies_ger,
                                                'C4_Restrictions.on.gatherings',
                                                'Germany'),
@@ -125,42 +131,29 @@ timeline_data <- rbind(build_start_stop_labels(policies_ger,
                                                'Sweden'))
 
 
-# load vistime
+# load library vistime for timeline plot and viridis for colormap
 library(vistime)
 
 # determine range of events
 event_range <- timeline_data %>% select(event) %>% range()
 
-color_map <- rev(heat.colors(event_range[2] + 5))
+# build color map depending on the range of events
+color_map <- rev(viridis(event_range[2]+1))
 
+# add column color and event for specific policy and corresponding policy
 timeline_data %<>% mutate(color = color_map[as.integer(event)+4]) %>%
                    mutate(event = as.character(event))
 
-
-test <- color_map[6:10]
-
-# plot timeline
-time_line_plot <- timeline_data %>% gg_vistime() +
-                  scale_color_manual(values = c('grey',
-                                                'green',
-                                                'blue',
-                                                'red',
-                                                'yellow',
-                                                'black'))
-
-library(viridis)
-color_map <- rev(viridis(event_range[2]+1))
-
+# build time line plot for the Restriction of gatherings policy
 time_line_plot <- ggplot(timeline_data, aes(x=start, xend=end, y=group, yend=group, color=event)) +
   geom_segment(size=10) +
   scale_color_manual(labels=c('no restrictions', 'above 1000 people','101-1000 people', '11-100 people', '10 people or less'), values = color_map) +
   labs(x = 'Date', y = 'Country',
        colour="Restrictions on\n gatherings")
-
-
-time_line_plot
 ```
 
+After having the policy timeline for germany and sweden the time-series for the 
+normalized new cases gets added:
 ```{r, cache=TRUE}
 # retrieve covid data from covid.ourworldindata.org git repository
 covid_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
@@ -181,8 +174,11 @@ library(magrittr)
 # retrieve covid data from covid.ourworldindata.org git repository
 covid_data_df <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
 
+# use a buffer storage variable since the data set is huge
 covid_data <- covid_data_df
 
+# filter for germany and sweden data and select location, date and smoothed new
+# cases per million
 covid_data %<>% filter(location=='Sweden' | location=='Germany') %>%
           select(location, date,
                  new_cases_smoothed_per_million) %>% # select columns of interest
@@ -190,24 +186,34 @@ covid_data %<>% filter(location=='Sweden' | location=='Germany') %>%
           mutate(date=as.Date(as.character(date),
                               format = "%Y-%m-%d")) # save date in date format
 
+# define colors for time series plot
 COLORS <- c(Germany = "steelblue", Sweden ="darkred")
 
+# build time-series plot
 lineplot <- covid_data %>% ggplot(aes(x = date, y = new_cases_smoothed_per_million,
                    group = location, color = location)) +
   geom_line() +
   scale_color_manual(values = COLORS) +
   labs(x = '', y = 'Smoothed New Cases\n per\n Million',
        colour="Countries")
-
-lineplot
 ```
 
 ```{r}
+# import cowplot for subplots
 library(cowplot)
 plot_grid(lineplot, time_line_plot,
           ncol = 1, align='v')
 
 ```
+After cleaning the data and building with it the plot. We retrieve a subplot
+consisting of a time series of the smoothed new cases per million of COVID-19 
+for germany and sweden. In relation to that we plotted the corresponding policies
+germany and sweden released in respect to restrictions and gatherings.
+
+That said we want to go into how situations in germany and sweden changed and
+how the countries reacted to those. Especially of interrest was the time when
+
+
 
 Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv) 
 
