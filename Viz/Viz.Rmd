@@ -133,6 +133,7 @@ timeline_data <- rbind(build_start_stop_labels(policies_ger,
 
 # load library vistime for timeline plot and viridis for colormap
 library(vistime)
+library(viridis)
 
 # determine range of events
 event_range <- timeline_data %>% select(event) %>% range()
@@ -150,6 +151,7 @@ time_line_plot <- ggplot(timeline_data, aes(x=start, xend=end, y=group, yend=gro
   scale_color_manual(labels=c('no restrictions', 'above 1000 people','101-1000 people', '11-100 people', '10 people or less'), values = color_map) +
   labs(x = 'Date', y = 'Country',
        colour="Restrictions on\n gatherings")
+
 ```
 
 After having the policy timeline for germany and sweden the time-series for the 
@@ -211,16 +213,30 @@ for germany and sweden. In relation to that we plotted the corresponding policie
 germany and sweden released in respect to restrictions and gatherings.
 
 That said we want to go into how situations in germany and sweden changed and
-how the countries reacted to those. Especially of interrest was the time when
+how the countries reacted to those. Especially of interrest was the time before
+the pandemic peak in germany in april. Both countries started on restricting
+gatherings. Germany reduced the allowed gatherings of 1000 people, while sweden
+was restricting it to 101-1000 people. After approximatly a week germany went into
+a lockdown, while sweden reduced the number of allowed people in a gathering to
+11-100. This policy sweden kept on until now. While in Germany during late summer
+some attempts to lighten the policies on gatherings had been tried out. But those
+have been overthrown with the increasing number of new cases.
 
+This shows that Sweden chose way lighter policies with respect to gatherings
+than germany even with way higher number of new cases.
 
-
-Zeitreihen in Facets, [Massnahmen](https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv) 
+So that we were asking ourself how this affected the narrative of the two countries
+to each other. The idea was to compare the news reports of the countries over
+each other.
 
 ## Viz 2
 
-Since the crisis-response seems to be different and we got the impression of the use of sweden as a bad example in German media, we wanted to see, whether the reporting in both countries about the respective other differed as well. The first aspect we found interesting, was the amount of articles over time. 
+Since the crisis-response seems to be different and we got the impression of the
+use of sweden as a bad example in German media, we wanted to see, whether the
+reporting in both countries about the respective other differed as well.
+The first aspect we found interesting, was the amount of articles over time.
 ```{r, fig.cap='Total amount of articles per day concerning the respective country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 100.000.000 Inhabitants. All amounts are scaled, so that the relative maximum in the timeframe is set to 100% to render them comparable, since the absolute number of articles as well as the case numbers differ widely.', cache = T}
+
 sentiment_time_series <-
   read_rds('./../data/documents_with_sentiments.rds') %>%
   mutate(publish_date = lubridate::as_date(as.Date(publish_date))) %>%
@@ -265,14 +281,17 @@ article_timeseries_viz <-
   geom_line(data = covid_data, aes(y = cases, x = date, color = location)) +
   scale_color_manual(values = COLORS) +
   theme(legend.position = 'bottom') +
-  labs(x = 'date of pulication', 
-       y = 'number of articles in % of maximum',
-       color = 'corona case numbers') 
-  
-plotly::ggplotly(article_timeseries_viz) ### oder einfach nur ggplot?
+  labs(x = 'Date of Publication', 
+       y = 'Number of Articles in % to Maximum',
+       color = 'New Covid-19 cases:') 
+
+
+article_timeseries_viz
 
 ```
-In comparing these time-courses with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to losely be coupled to the amount of cases in the respective other country, we will look at the content of these reports.
+By comparing these time-series with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to losely be coupled to the amount of cases in the respective other country, we will look at the content of these reports.
+
+## Der Plot ist noch ein bisschen überladen. Was ich nicht so richtig verstehe
 
 
 ## Viz 3
@@ -436,9 +455,8 @@ wordcloud <- function(wc_data,country){
 ger_wc <- wc_data %>% 
   filter(country == 'Germany') %>% 
   arrange(desc(n)) %>% 
-  head(200) %>% 
+  head(200) %>%
   wordcloud(country = 'DE')
-
 
 swe_wc <- wc_data %>% 
   filter(country == 'Sweden') %>% 
@@ -449,7 +467,3 @@ swe_wc <- wc_data %>%
 cowplot::plot_grid(ger_wc, swe_wc)
 
 ```
-
-
-
-
