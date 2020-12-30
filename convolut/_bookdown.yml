@@ -1,0 +1,12 @@
+book_filename: "DataVizAssignment"
+delete_merged_file: true
+language:
+  ui:
+    chapter_name: ""
+rmd_files: [
+  'index.Rmd',
+  './../data_acquisition/data_acquisition.Rmd',
+  './../Viz/Viz.Rmd',
+  'references.Rmd'
+]
+output_dir: "./../docs"

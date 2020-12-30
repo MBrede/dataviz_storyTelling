@@ -30,11 +30,14 @@ library(sf)
 # library for using external fonts
 library(showtext)
 
+# library for additional color-map
+library(viridis)
+
 font_add_google('Lato', 'lato')
 theme_set(theme_light(base_family = 'lato', base_size = 20))
 showtext_auto()
 
-knitr::opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F)
+knitr::opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F, eval = T)
 
 ```
 
@@ -57,7 +60,7 @@ corresponding policies differ between the two countries.
 For attaining the covid-19 policy data we read the data from the github of the
 [Coronavirus Government Response Tracker Project](https://www.bsg.ox.ac.uk/research/research-projects/coronavirus-government-response-tracker#data).
 
-```{r, cache=TRUE}
+```{r}
 
 limits=as.Date(c('2020-01-01', '2020-12-31'))
 
@@ -176,7 +179,7 @@ time_line_plot <- ggplot(timeline_data, aes(x=start, xend=end, y=group, yend=gro
 
 After having the policy timeline for germany and sweden the time-series for the 
 normalized new cases gets added:
-```{r, cache=TRUE}
+```{r}
 # retrieve covid data from covid.ourworldindata.org git repository
 covid_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
 
@@ -202,7 +205,7 @@ lineplot <- covid_data %>% ggplot(aes(x = date, y = new_cases_smoothed_per_milli
   scale_x_date(limits = limits)
 ```
 
-```{r}
+```{r, fig.cap='Time-series of infections and restrictions.'}
 plot_grid(lineplot, time_line_plot,
           ncol = 1, align='v')
 
@@ -377,7 +380,7 @@ regional_sents %<>%
 
 This dataset can now be used to depict the overall regional sentiment in both countries:
 
-```{r}
+```{r, fig.cap='Mean sentiment per region as detected in the mainstrem-news articles about the respective other country.'}
 reg_sent_plot <- function(data,legend){
   p <- ggplot(data) +
     geom_sf(aes(geometry = geometry,fill = sentiment), color = 'grey', expand = F) +
@@ -417,7 +420,7 @@ cowplot::plot_grid(
 And finally, let's look at some wordclouds:
 
 
-```{r}
+```{r, fig.cap='Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated.'}
 
 wc_data <- read_rds('./../data/wordcloud_data.rds')
 

@@ -1,0 +1,17 @@
+bookdown::gitbook:
+  css: style.css
+  toc_depth: 2
+  number_sections: false
+  config:
+    toc:
+      before: |
+        <li><a href="./">DataViz-Assignment</a></li>
+      after: |
+        <li><a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"><img alt="Creative Commons Lizenzvertrag" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a></li>
+    download: []
+# bookdown::pdf_book:
+#   includes:
+#     in_header: preamble.tex
+#   latex_engine: xelatex
+#   citation_package: natbib
+#   keep_tex: yes
