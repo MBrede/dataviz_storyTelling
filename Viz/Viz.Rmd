@@ -44,120 +44,16 @@ knitr::opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F, ev
 
 # Vizualizing the data
 
-## Introduction
+## Policies and Cases
 
-During the COVID-19 pandemic different policies have been chosen by the countries
-to prevent a overloading of their health care system. Especially the country sweden
-has been known for choosing moderate policies. So that the question came up how 
-the press of other countries is reporting about sweden. And in reverse, how 
-sweden is reporting about other countries. We have choosen as a comparison
-Germany since it's the country we are from.
+Since our main goal is to see if media coverage differs in countries with different reactions to the pandemic, the first step is to analyse whether Swedish and German reactions and case numbers actually differ.
 
 First off we want to show how the situations of new confirmed cases and the
-corresponding policies differ between the two countries.
-
-## Attaining the data
-For attaining the covid-19 policy data we read the data from the github of the
-[Coronavirus Government Response Tracker Project](https://www.bsg.ox.ac.uk/research/research-projects/coronavirus-government-response-tracker#data).
+corresponding policies differ between the two countries. This is to see, whether the countries' responses do differ as is communicated in German media.
 
 ```{r}
+limits <-  as.Date(c('2020-01-01', '2020-12-31'))
 
-limits=as.Date(c('2020-01-01', '2020-12-31'))
-
-# read policies csv-file
-policies <- read.csv('https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv')
-```
-
-For the meanings of specific policies take a look on the [Codebook](https://github.com/OxCGRT/covid-policy-tracker/blob/master/documentation/codebook.md) of the project.
-
-A function for the data pre-filtering:
-```{r}
-# a function for pre filtering
-
-filtering <- function(country_name, policy_filter) {
-   policies_ger <- policies %>%
-                filter(CountryName==country_name) %>% # filter policies by germany
-                select(policy_filter) %>% # select policies of interest
-                mutate(Date=as.Date(as.character(Date),
-                                    format = "%Y%m%d")) %>% # change date format
-                na.omit() %>% # remove rows with na entries
-                arrange(Date) # order rows by date
-}
-```
-
-
-The data has to be restructured for being possible to plot. So that's the
-function for doing that:
-```{r}
-# a function to build start and stop labels for the equivalent policy
-build_start_stop_labels <- function(policies, policy, label){
-  # get selected policy data
-  selected_policy <- policies %>%
-                      select(Date, policy)
-
-  # build bit-mask for policy changes
-  bit_mask <- selected_policy[,policy] -  lag(selected_policy[,policy], n = 1) != 0
-
-  # set last entry true (is na because of lag)
-  bit_mask[is.na(bit_mask)] <- TRUE
-  
-  # initialize start and stop list
-  start <- c()
-  stop <- c()
-
-  # initialize a state variable for tracking start position
-  start_state <- TRUE
-
-  # iterate through rows for finding start and stop positions
-  for(row in 1:length(bit_mask)){
-    # check whether it's a stop position
-    if(bit_mask[row] & !start_state){
-      stop <- c(stop, row-1)
-      start_state <- TRUE
-    }
-    # check whether it's a start position
-    if(bit_mask[row] & start_state){
-      start <- c(start, row)
-      start_state <- FALSE
-    }
-  }
-
-  # add last row as stop
-  stop <- c(stop, row)
-  
-  # retrieve start and stop dates from the data set
-  start_date <- selected_policy[start, 'Date']
-  stop_date <- selected_policy[stop, 'Date']
-  # retrieve event number from the data set
-  events <- selected_policy[start, policy]
-  
-  # return dataframe with start/stop dates for the polcies
-  return(data.frame(event = events, start = start_date, end = stop_date,
-                    group = label))
-}
-
-```
-
-After that we build the timeline plot for the stay at home.
-```{r}
-# set filter for columns of interest
-policy_filter <- c('CountryCode', 'Date', 'C8_International.travel.controls',
-  'C6_Stay.at.home.requirements', 'C4_Restrictions.on.gatherings')
-
-# retrieve policy data for germany and sweden
-policies_ger <- filtering('Germany', policy_filter)
-policies_se <- filtering('Sweden', policy_filter)
-
-# rebuild data into start and stop labels
-timeline_data <- rbind(build_start_stop_labels(policies_ger,
-                                               'C4_Restrictions.on.gatherings',
-                                               'Germany'),
-                       build_start_stop_labels(policies_se,
-                                               'C4_Restrictions.on.gatherings',
-                                               'Sweden'))
-```
-
-```{r}
 # determine range of events
 event_range <- timeline_data %>% select(event) %>% range()
 
@@ -170,27 +66,29 @@ timeline_data %<>% mutate(color = color_map[as.integer(event)+4]) %>%
 
 # build time line plot for the Restriction of gatherings policy
 time_line_plot <- ggplot(timeline_data, aes(x=start, xend=end, y=group, yend=group, color=event)) +
-  geom_segment(size=10) +
+  geom_segment(size=10,) +
   scale_color_manual(labels=c('no restrictions', 'above 1000 people','101-1000 people', '11-100 people', '10 people or less'), values = color_map) +
   labs(x = 'Date', y = 'Country',
        colour="Restrictions on\n gatherings") +
-  scale_x_date(limits = limits)
+  scale_x_date(limits = limits) 
 ```
 
-After having the policy timeline for germany and sweden the time-series for the 
+After having the policy time line for Germany and Sweden the time-series for the 
 normalized new cases gets added:
 ```{r}
 # retrieve covid data from covid.ourworldindata.org git repository
 covid_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
 
-# filter for germany and sweden data and select location, date and smoothed new
+# filter for Germany and Sweden data and select location, date and smoothed new
 # cases per million
 covid_data %<>% filter(location=='Sweden' | location=='Germany') %>%
           select(location, date,
                  new_cases_smoothed_per_million) %>% # select columns of interest
           na.omit() %>% # remove rows with na entries             
           mutate(date=as.Date(as.character(date),
-                              format = "%Y-%m-%d")) # save date in date format
+                              format = "%Y-%m-%d"))  # save date in date format
+          
+
 
 # define colors for time series plot
 COLORS <- c(Germany = "steelblue", Sweden ="darkred")
@@ -201,44 +99,49 @@ lineplot <- covid_data %>% ggplot(aes(x = date, y = new_cases_smoothed_per_milli
   geom_line() +
   scale_color_manual(values = COLORS) +
   labs(x = '', y = 'Smoothed New Cases\n per\n Million',
-       colour="Countries") +
-  scale_x_date(limits = limits)
+       colour="Countries",
+       title = "Time Series of New Cases and Restrictions on Gatherings") +
+  scale_x_date(limits = limits)+
+  theme(plot.title = element_text(hjust = 0.5,face = 'bold'))
 ```
 
-```{r, fig.cap='Time-series of infections and restrictions.'}
+```{r, fig.cap='Time-series of smoothed new cases and restrictions on gatherings.'}
 plot_grid(lineplot, time_line_plot,
           ncol = 1, align='v')
 
 ```
-After cleaning the data and building with it the plot. We retrieve a subplot
-consisting of a time series of the smoothed new cases per million of COVID-19 
-for germany and sweden. In relation to that we plotted the corresponding policies
-germany and sweden released in respect to restrictions and gatherings.
 
-That said we want to go into how situations in germany and sweden changed and
-how the countries reacted to those. Especially of interrest was the time before
-the pandemic peak in germany in april. Both countries started on restricting
-gatherings. Germany reduced the allowed gatherings of 1000 people, while sweden
-was restricting it to 101-1000 people. After approximatly a week germany went into
-a lockdown, while sweden reduced the number of allowed people in a gathering to
-11-100. This policy sweden kept on until now. While in Germany during late summer
-some attempts to lighten the policies on gatherings had been tried out. But those
-have been overthrown with the increasing number of new cases.
+After cleaning the data and building the plot, we retrieve a subplot
+consisting of a time series of the smoothed new cases per million of COVID-19 
+for Germany and Sweden. As a comparison, we plotted the corresponding policies
+Germany and Sweden released in respect to restrictions on gatherings.
+
+That said we want to go into how situations in Germany and Sweden changed and
+how the countries reacted to those. Especially of interest was the time before
+the pandemic peak in Germany in April. Both countries started on restricting
+gatherings. Germany reduced the allowed gatherings of 1000 people, while Sweden
+was restricting it to 101-1000 people. After approximately a week Germany went into
+a lockdown, while Sweden reduced the number of allowed people in a gathering to
+11-100. This policy was kept by the Swedish Government until recently. 
+While the German federal governments tried to lighten the policies during late summer, those attempts have been overthrown with the increasing number of new cases though.
 
 This shows that Sweden chose way lighter policies with respect to gatherings
-than germany even with way higher number of new cases.
+than Germany even with a way higher number of new confirmed cases.
 
 So that we were asking ourself how this affected the narrative of the two countries
 to each other. The idea was to compare the news reports of the countries over
 each other.
 
-## Viz 2
+## Amount of reports
 
 Since the crisis-response seems to be different and we got the impression of the
-use of sweden as a bad example in German media, we wanted to see, whether the
+use of Sweden as a bad example in German media, we wanted to see, whether the
 reporting in both countries about the respective other differed as well.
 The first aspect we found interesting, was the amount of articles over time.
-```{r, fig.cap='Total amount of articles per day concerning the respective country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 100.000.000 Inhabitants. All amounts are scaled, so that the relative maximum in the timeframe is set to 100% to render them comparable, since the absolute number of articles as well as the case numbers differ widely.'}
+
+Since we expect a coupling of case numbers and number of articles, we'll try to compare those. To make the comparison easier, we'll scale all values so that the relative maximum in the time frame is set to 100%. Due to rate limiting, we do only have article counts until the end of November.
+
+```{r, fig.cap='Total amount of articles per day concerning the respective other country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 1.000.000 Inhabitants.'}
 
 sentiment_time_series <-
   read_rds('./../data/documents_with_sentiments.rds') %>%
@@ -277,29 +180,35 @@ covid_data %<>%
 
 article_timeseries_viz <- 
   sentiment_time_series %>% 
+  mutate(country = recode(country,
+                          Germany = 'German news \n about Sweden',
+                          Sweden = 'Swedish news \n about Germany')) %>% 
   ggplot(aes(x = publish_date, y = original)) +
-  geom_point(color = scales::muted('blue'), alpha = .25) +
+  geom_point(color = scales::muted('blue'), alpha = .1) +
   geom_line(aes(y = filter), color = scales::muted('blue')) +
   facet_grid(rows = vars(country),scales = 'fixed') +
   geom_line(data = covid_data, aes(y = cases, x = date, color = location)) +
   scale_color_manual(values = COLORS) +
-  theme(legend.position = 'bottom') +
+  theme(legend.position = 'bottom',
+        plot.title = element_text(hjust = 0.5,face = 'bold')) +
   labs(x = 'Date of Publication', 
-       y = 'Number of Articles in % to Maximum',
-       color = 'New Covid-19 cases:') 
+       y = 'New cases and articles in % of Maximum',
+       color = 'New Covid-19 cases:',
+       title = 'News articles and new cases in Sweden and Germany') +
+  scale_x_date(limits = as.Date(c('2020-01-01', '2020-11-20')))
 
 
 article_timeseries_viz
 
 ```
-By comparing these time-series with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to losely be coupled to the amount of cases in the respective other country, we will look at the content of these reports.
-
-## Der Plot ist noch ein bisschen überladen. Was ich nicht so richtig verstehe
+By comparing these time-series with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to loosely be coupled to the amount of cases in the respective other country, we will look at the content of these reports. It seems interesting, whether these reports are purely factual, or if some emotional loading can be detected.
 
 
-## Viz 3
+## Sentiments
 
-Let's start by using the rather patchy sentiments we were able to gather to generate a few maps
+Let's start by using the rather patchy sentiments we were able to gather to generate a few maps of the regions of both countries depicting the respective tonality. 
+
+So let's first load the data and the countries' outlines:
 
 
 ```{r}
@@ -326,61 +235,18 @@ regional_sents <- read_rds('./../data/documents_with_sentiments.rds') %>%
 Now we need to cross-reference the Mediacloud countrycodes (ISO 3166:SE, ISO 3166:DE) with the `eurostat` ones:
 
 ```{r}
-iso_3166 <- read_delim(
-  'Provinz;Code
-  Blekinge län;SE-K
-  Dalarnas län;SE-W
-  Gotlands län;SE-I
-  Gävleborgs län;SE-X
-  Hallands län;SE-N
-  Jämtlands län;SE-Z
-  Jönköpings län;SE-F
-  Kalmar län;SE-H
-  Kronobergs län;SE-G
-  Norrbottens län;SE-BD
-  Skåne län;SE-M
-  Stockholms län;SE-AB
-  Södermanlands län;SE-D
-  Uppsala län;SE-C
-  Värmlands län;SE-S
-  Västerbottens län;SE-AC
-  Västernorrlands län;SE-Y
-  Västmanlands län;SE-U
-  Västra Götalands län;SE-O
-  Örebro län;SE-T
-  Östergötlands län;SE-E
-  Baden-Württemberg;DE-BW
-  Bayern;DE-BY
-  Berlin;DE-BE
-  Brandenburg;DE-BB
-  Bremen;DE-HB
-  Hamburg;DE-HH
-  Hessen;DE-HE
-  Mecklenburg-Vorpommern;DE-MV
-  Niedersachsen;DE-NI
-  Nordrhein-Westfalen;DE-NW
-  Rheinland-Pfalz;DE-RP
-  Saarland;DE-SL
-  Sachsen;DE-SN
-  Sachsen-Anhalt;DE-ST
-  Schleswig-Holstein;DE-SH
-  Thüringen;DE-TH',
-  delim = ';'
-) %>% 
+iso_3166 <- read_csv('./../data/regional_codes.csv') %>% 
   mutate(across(everything(), ~str_trim(.)))%>% 
   mutate(Provinz = str_to_lower(Provinz))
 
 
 regional_sents %<>%
   right_join(iso_3166, by = c(pub_state = 'Code'))
-
-
-
 ```
 
 This dataset can now be used to depict the overall regional sentiment in both countries:
 
-```{r, fig.cap='Mean sentiment per region as detected in the mainstrem-news articles about the respective other country.'}
+```{r, fig.cap='Mean sentiment per region as detected in the mainstream-news articles about the respective other country.'}
 reg_sent_plot <- function(data,legend){
   p <- ggplot(data) +
     geom_sf(aes(geometry = geometry,fill = sentiment), color = 'grey', expand = F) +
@@ -407,17 +273,20 @@ plots <- sf_data %>%
 
 legend <- cowplot::get_legend(reg_sent_plot(mutate(sf_data,sentiment = 0),legend = T))
 
+
 cowplot::plot_grid(
-  cowplot::plot_grid(plotlist = plots),
+  cowplot::plot_grid(plotlist = plots,
+                     labels = c('Germany about Sweden', 'Sweden about Germany')),
   legend,
-  rel_widths =  c(4,.4)
+  rel_widths =  c(4,.6)
 )
+
 
  
 ```
 
 
-And finally, let's look at some wordclouds:
+Since the sentiments are not really the way we would like it, a qualitative approach has to make do. We decided to create some wordclouds to get a better impression of the reports' tonality.
 
 
 ```{r, fig.cap='Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated.'}

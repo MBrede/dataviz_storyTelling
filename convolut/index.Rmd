@@ -16,6 +16,10 @@ nocite: '@*'
 
 This document is created using `bookdown` and presents the results of our DataViz-Assignment in the context of our Data Science studies at the Fachhochschule Kiel.
 
+During the COVID-19 pandemic different policies have been chosen by the countries
+to prevent an overloading of their health care system. Especially the country Sweden
+has been known for choosing moderate policies, which has been extensively reported in German media. So the question to be dealt with is how the German press is reporting about Sweden as compared to how the Swedish press is reporting about Germany. 
+
 <footer>
 <div style="font-size: 75%; display: flex; align-items: center; justify-content: center;style="padding-top: 50px;">
 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/" style="padding-right: 10px;"><img alt="Creative Commons Lizenzvertrag" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a></li><p> This document is licensed under the  <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"> CC BY-SA 4.0-license</a>.</p>
