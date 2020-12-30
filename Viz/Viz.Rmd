@@ -1,25 +1,19 @@
----
-title: 'Comparison of Narratives between German and Swedish News Articles during the COVID-19 Pandemic'
-author: 'Max Brede and Janik Dunker'
-date: \today
-output:
-  html_document:
-    css: styles.css
-    fig_caption: true
-    toc: true
----
+<!-- # --- -->
+<!-- title: 'Comparison of Narratives between German and Swedish News Articles during the COVID-19 Pandemic' -->
+<!-- author: 'Max Brede and Janik Dunker' -->
+<!-- date: \today -->
+<!-- output: -->
+<!--   html_document: -->
+<!--     css: styles.css -->
+<!--     fig_caption: true -->
+<!--     toc: true -->
+<!-- --- -->
 
-```{r setup, include=FALSE}
+```{r setup viz, include=FALSE}
 # import libraries
 
 # library for data import, wrangling and visualization
 library(tidyverse)
-
-# library timeline plots
-library(vistime)
-
-# library for colormap
-library(viridis)
 
 # library for magic pipeline operator :D
 library(magrittr)
@@ -43,6 +37,9 @@ showtext_auto()
 knitr::opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F)
 
 ```
+
+
+# Vizualizing the data
 
 ## Introduction
 
@@ -455,13 +452,13 @@ wordcloud <- function(wc_data,country){
 ger_wc <- wc_data %>% 
   filter(country == 'Germany') %>% 
   arrange(desc(n)) %>% 
-  head(200) %>%
+  head(500) %>%
   wordcloud(country = 'DE')
 
 swe_wc <- wc_data %>% 
   filter(country == 'Sweden') %>% 
   arrange(desc(n)) %>% 
-  head(200) %>% 
+  head(500) %>% 
   wordcloud(country = 'SE')
 
 cowplot::plot_grid(ger_wc, swe_wc)
