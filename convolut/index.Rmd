@@ -1,15 +1,19 @@
 --- 
-title: "Comparison of Narratives between German and Swedish News Articles during the COVID-19 Pandemic"
-author: "Max Brede und Janik Dunker"
+title: Comparison of Narratives between German and Swedish News Articles during the
+  COVID-19 Pandemic
+author: "Max Brede and Janik Dunker"
 date: "`r Sys.Date()`"
-site: bookdown::bookdown_site
+output: pdf_document
 documentclass: book
-bibliography: [./../data_acquisition/references.bib, packages.bib]
+bibliography:
+- ./../data_acquisition/references.bib
+- packages.bib
 biblio-style: apalike
 link-citations: yes
-description: "Our results for the dataviz-assignment."
+description: Our results for the dataviz-assignment.
 csl: ./../data_acquisition/apa.csl
 nocite: '@*'
+site: bookdown::bookdown_site
 ---
 
 # Introduction
