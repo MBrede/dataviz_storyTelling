@@ -24,7 +24,7 @@ library(magrittr) #for additional pipes
 library(furrr) # parallel-processing
 
 
-opts_chunk$set(echo = T,message = F, fig.align = 'center', eval = F)
+opts_chunk$set(echo = T,message = F, fig.align = 'center')
 
 theme_set(theme_light())
 
@@ -92,7 +92,7 @@ ger_sources %>%
 
 
 
-```{r, include=F}
+```{r, include=F, eval = F}
 save(list = ls(),file = './../data/pre_steps.RData')
 ```
 
@@ -101,7 +101,7 @@ save(list = ls(),file = './../data/pre_steps.RData')
 
 We then use the collections to query the API for the matrices and the story-meta-information. To do this, we first build our query-function using httr:
 
-```{r}
+```{r, eval = F}
 
 get_stories <- function(time_range,query,media_ids){
   require(httr) # GET and POST-requests
@@ -168,7 +168,7 @@ get_stories <- function(time_range,query,media_ids){
 
 Since we are limiting every query to 2000 storys to reduce network-strain, we will send a query for every week in 2020. We therefore construct a vector of date-ranges.
 
-```{r}
+```{r, eval = F}
 weeks <- paste0('[',
                 as.Date('2020-01-01') +lubridate::weeks(c(0:51)),
                 'T00:00:00Z TO ',
@@ -181,7 +181,7 @@ The last step is to define the actual query-terms. Since we want to see only the
 
 Now everything is prepared to run our queries. Since we wanted it to run quickly, we cheated a bit and ran it in a separate script, but we used the following code:
 
-```{r}
+```{r, eval = F}
 
 plan(multicore(workers = 8))
 
@@ -202,7 +202,7 @@ german_stories <- weeks %>%
 
 
 
-```{r, include=F}
+```{r, include=F, eval = F}
 load('./../data/collected_data.RData')
 ```
 
@@ -210,7 +210,7 @@ load('./../data/collected_data.RData')
 
 The first step in processing the data is to remove all empty lists that indicate weeks with no articles whatsoever. This can be achieved with a simple filter:
 
-```{r}
+```{r, eval = F}
 
 german_stories %<>% .[which(map_lgl(.,  ~ length(.) > 1))]
 swedish_stories %<>% .[which(map_lgl(.,  ~ length(.) > 1))]
@@ -224,7 +224,7 @@ Since we used forked processing to gather our data, we have to combine it. The a
 
 To aggregate our our meta-datasets we first need to define a few helper-functions which mostly do a bit of cleaning since the resulting data-frames are a bit in-consistent.
 
-```{r}
+```{r, eval = F}
 
 first_non_na <- function(row){
   first(row[which(!is.na(row))])
@@ -254,7 +254,7 @@ swedish_meta <- swedish_stories %>%
 
 To combine the triplet-matrices, we need to define some helpers again. A simple row-binding of the matrices would not do, since every set of articles will have a seperate set of words. So we will need to use some R-trickery.
 
-```{r}
+```{r, eval = F}
 
 resolve_redundancies <- function(mat1,mat2=NULL){ #combines two triplets into one
   if(is.null(mat2)){
@@ -297,7 +297,7 @@ combine_all_triplets <- function(triplets, language){ # iterative wrapper to com
 
 These helpers can then be used to assemble our final matrices.
 
-```{r}
+```{r, eval = F}
 german_doc_term <- german_stories %>% 
   map(~first(.)) %>% 
   combine_all_triplets('german')
@@ -426,7 +426,7 @@ ger_sent %>%
 
 ## Translation
 
-```{r, include= F}
+```{r, include= F, eval = F}
 save(german_word_freq, swedish_word_freq, file = './../data/word_freqs.RData')
 ```
 
@@ -435,7 +435,7 @@ Since the non-english dictionaries we found are rather uncomplete, we'll try one
 
 Let's first define a helper function to use the [MyMemory](https://mymemory.translated.net/doc/spec.php) translation API.
 
-```{r}
+```{r, eval = F}
 translate_with_mymemory <- function(word, from, to = 'en'){
   .GlobalEnv$translated <- 0
   require(httr)
@@ -463,7 +463,7 @@ translate_with_mymemory <- function(word, from, to = 'en'){
 
 We'll then use this helper to translate the 5000 most used words in both matrices. (We used an external script again, but the code ist the same.)
 
-```{r}
+```{r, eval = F}
 plan(multicore(workers = 8))
 
 german_keys <- read_rds('./../data/german_stem_keys.rds') 
@@ -588,7 +588,7 @@ For the two visualisations we had in mind we'll need two data sets.
 
 The first one is easy, we just need to combine the sentiment sets we created in the last step:
 
-```{r}
+```{r, eval = F}
 imap_dfr(list('Sweden' = swe_sent,
               'Germany' = ger_sent),
           ~mutate(.x, country = .y)) %>% 
@@ -597,7 +597,7 @@ imap_dfr(list('Sweden' = swe_sent,
 
 The second one is a bit more tricky, since we need to look up in the respective dtms, which document used which terms in which frequency to then average the respective sentiments. This sentiment-per-document-set can then be joined with the existing meta-data.
 
-```{r}
+```{r, eval = F}
 get_sentiment_per_document <- function(dtm, sentiment){
   
   extract_counts <- function(id,dtm, sentiment){

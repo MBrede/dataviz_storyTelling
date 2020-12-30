@@ -325,6 +325,12 @@ normalized new cases gets added:</p>
 <span id="cb31-23"><a href="vizualizing-the-data.html#cb31-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_date</span>(<span class="at">limits =</span> limits)</span></code></pre></div>
 <div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb32-1"><a href="vizualizing-the-data.html#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_grid</span>(lineplot, time_line_plot,</span>
 <span id="cb32-2"><a href="vizualizing-the-data.html#cb32-2" aria-hidden="true" tabindex="-1"></a>          <span class="at">ncol =</span> <span class="dv">1</span>, <span class="at">align=</span><span class="st">&#39;v&#39;</span>)</span></code></pre></div>
+<div class="figure" style="text-align: center"><span id="fig:unnamed-chunk-31"></span>
+<img src="DataVizAssignment_files/figure-html/unnamed-chunk-31-1.png" alt="Time-series of infections and restrictions." width="672" />
+<p class="caption">
+Figure 1: Time-series of infections and restrictions.
+</p>
+</div>
 <p>After cleaning the data and building with it the plot. We retrieve a subplot
 consisting of a time series of the smoothed new cases per million of COVID-19
 for germany and sweden. In relation to that we plotted the corresponding policies
@@ -400,6 +406,12 @@ The first aspect we found interesting, was the amount of articles over time.</p>
 <span id="cb33-48"><a href="vizualizing-the-data.html#cb33-48" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb33-49"><a href="vizualizing-the-data.html#cb33-49" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb33-50"><a href="vizualizing-the-data.html#cb33-50" aria-hidden="true" tabindex="-1"></a>article_timeseries_viz</span></code></pre></div>
+<div class="figure" style="text-align: center"><span id="fig:unnamed-chunk-32"></span>
+<img src="DataVizAssignment_files/figure-html/unnamed-chunk-32-1.png" alt="Total amount of articles per day concerning the respective country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 100.000.000 Inhabitants. All amounts are scaled, so that the relative maximum in the timeframe is set to 100% to render them comparable, since the absolute number of articles as well as the case numbers differ widely." width="672" />
+<p class="caption">
+Figure 2: Total amount of articles per day concerning the respective country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 100.000.000 Inhabitants. All amounts are scaled, so that the relative maximum in the timeframe is set to 100% to render them comparable, since the absolute number of articles as well as the case numbers differ widely.
+</p>
+</div>
 <p>By comparing these time-series with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to losely be coupled to the amount of cases in the respective other country, we will look at the content of these reports.</p>
 </div>
 <div id="der-plot-ist-noch-ein-bisschen-überladen.-was-ich-nicht-so-richtig-verstehe" class="section level2">
@@ -504,6 +516,12 @@ The first aspect we found interesting, was the amount of articles over time.</p>
 <span id="cb36-29"><a href="vizualizing-the-data.html#cb36-29" aria-hidden="true" tabindex="-1"></a>  legend,</span>
 <span id="cb36-30"><a href="vizualizing-the-data.html#cb36-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">rel_widths =</span>  <span class="fu">c</span>(<span class="dv">4</span>,.<span class="dv">4</span>)</span>
 <span id="cb36-31"><a href="vizualizing-the-data.html#cb36-31" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<div class="figure" style="text-align: center"><span id="fig:unnamed-chunk-35"></span>
+<img src="DataVizAssignment_files/figure-html/unnamed-chunk-35-1.png" alt="Mean sentiment per region as detected in the mainstrem-news articles about the respective other country." width="672" />
+<p class="caption">
+Figure 3: Mean sentiment per region as detected in the mainstrem-news articles about the respective other country.
+</p>
+</div>
 <p>And finally, let’s look at some wordclouds:</p>
 <div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="vizualizing-the-data.html#cb37-1" aria-hidden="true" tabindex="-1"></a>wc_data <span class="ot">&lt;-</span> <span class="fu">read_rds</span>(<span class="st">&#39;./../data/wordcloud_data.rds&#39;</span>)</span>
 <span id="cb37-2"><a href="vizualizing-the-data.html#cb37-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -548,6 +566,12 @@ The first aspect we found interesting, was the amount of articles over time.</p>
 <span id="cb37-41"><a href="vizualizing-the-data.html#cb37-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">wordcloud</span>(<span class="at">country =</span> <span class="st">&#39;SE&#39;</span>)</span>
 <span id="cb37-42"><a href="vizualizing-the-data.html#cb37-42" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb37-43"><a href="vizualizing-the-data.html#cb37-43" aria-hidden="true" tabindex="-1"></a>cowplot<span class="sc">::</span><span class="fu">plot_grid</span>(ger_wc, swe_wc)</span></code></pre></div>
+<div class="figure" style="text-align: center"><span id="fig:unnamed-chunk-36"></span>
+<img src="DataVizAssignment_files/figure-html/unnamed-chunk-36-1.png" alt="Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated." width="672" />
+<p class="caption">
+Figure 4: Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated.
+</p>
+</div>
 
 </div>
 </div>

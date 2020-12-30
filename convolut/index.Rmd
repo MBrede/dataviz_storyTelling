@@ -9,6 +9,7 @@ biblio-style: apalike
 link-citations: yes
 description: "Our results for the dataviz-assignment."
 csl: ./../data_acquisition/apa.csl
+nocite: '@*'
 ---
 
 # Introduction
