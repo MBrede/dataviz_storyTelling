@@ -33,11 +33,11 @@ theme_set(theme_light())
 ## Sources for News-Articles {.tabset}
 
 
-We want to take a look at the German news reports about the Swedish response to the COVID-19 Pandemic and vice versa.
+We want to look at the German news reports about the Swedish Corona-response and vice versa.
 
-To do this, we will use the [Mediacloud](https://mediacloud.org/#/Home) API to gather news articles for the time frame since January of 2020. This API is publicly available after a free registration.
+To do this, we will use the after a free registration openly available [Mediacloud](https://mediacloud.org/#/Home) API to gather news-articles for the time frame since January of 2020.
 
-The API allows users to search for terms for a given set of news-media outlets in addition to some filter settings like a given time frame and such. These queries can be sent to a whole range of API endpoints, including one that returns document term matrices and one that returns all gathered meta-information MediaCloud collected.
+The API allows users to search for terms for a given set of news-media outlets in addition to some filter settings like a given time-frame and such. These queries can be sent to a whole range of API endpoints, including one that returns document term matrices and one that returns all gathered meta-information MediaCloud collected.
 
 Since we only want to look at german and swedish media outlets, we will be using two "Collections" of outlets as provided by Mediacloud. The selections we will be using are discussed in the following section.
 

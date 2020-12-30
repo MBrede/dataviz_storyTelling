@@ -1,21 +1,4 @@
 --- 
-<<<<<<< HEAD
-title: Comparison of Narratives between German and Swedish News Articles during the
-  COVID-19 Pandemic
-author: "Max Brede and Janik Dunker"
-date: "`r Sys.Date()`"
-output: pdf_document
-documentclass: book
-bibliography:
-- ./../data_acquisition/references.bib
-- packages.bib
-biblio-style: apalike
-link-citations: yes
-description: Our results for the dataviz-assignment.
-csl: ./../data_acquisition/apa.csl
-nocite: '@*'
-site: bookdown::bookdown_site
-=======
 title: "Comparison of Narratives between German and Swedish News Articles during the COVID-19 Pandemic"
 author: "Max Brede und Janik Dunker"
 date: "`r Sys.Date()`"
@@ -27,7 +10,6 @@ link-citations: yes
 description: "Our results for the dataviz-assignment."
 csl: ./../data_acquisition/apa.csl
 nocite: '@*'
->>>>>>> c22443cb6b8f90be82cb47e5ad1c9eff73d4aa28
 ---
 
 # Introduction
@@ -47,8 +29,4 @@ knitr::write_bib(c(
   .packages(), 'bookdown', 'knitr', 'rmarkdown', 'tidyverse', 'kableExtra', 'glue', 'slam', 'magrittr', 'cowplot', 'eurostat', 'sf', 'showtext','httr','SnowballC','tm','furrr'
 ), 'packages.bib')
 
-<<<<<<< HEAD
 ```
-=======
-```
->>>>>>> c22443cb6b8f90be82cb47e5ad1c9eff73d4aa28
