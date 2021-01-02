@@ -297,6 +297,7 @@ wordcloud <- function(wc_data,country, title){
                          high = scales::muted('blue'),
                          na.value = 'darkgrey',
                          limits = c(-5,5)) +
+    scale_size(range = c(3,9)) +
     labs(title = title) +
     theme_void(base_family = 'lato', base_size = 20) + 
     theme(plot.title = element_text(hjust = 0.5,face = 'bold')) # plot the image
@@ -363,6 +364,7 @@ tibble(words = german_dtm$dimnames$cols,
   head(1000) %>% 
   ggplot(aes(label = words, size = n)) + 
     geom_text_wordcloud(mask = img,rm_outside = T, color = 'darkgrey') +
+    scale_size(range = c(3,9)) +
   theme_void(base_family = 'lato', base_size = 20) +
   labs(title = 'Words used by German newspapers') +
   theme(plot.title = element_text(hjust = 0.5,face = 'bold'))
