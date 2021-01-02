@@ -324,7 +324,7 @@ ggsave('./../imgs/wordclouds.png', p,width = 4, height = 4,units = 'in') # highe
 ```
 
 ```{r, echo = F, fig.cap='Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated.'}
-knitr::include_graphics('./../imgs/wordclouds.png')
+knitr::include_graphics('imgs/wordclouds.png')
 ```
 First of all, the sentiment analysis did not work well. Though a handful of sentimental terms as died, virus, infected, epidemic, disease, debt or hurt have got a sensible sentiment assigned, some words as 'trump' have clearly been misjudged. A lot of the words used in the description of the pandemic are of special vocabulary, such as risk area and special path and were not assigned any sentiment.
 
