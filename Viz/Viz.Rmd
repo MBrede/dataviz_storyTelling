@@ -11,34 +11,30 @@
 
 ```{r setup viz, include=FALSE}
 # import libraries
-
 # library for data import, wrangling and visualization
 library(tidyverse)
-
 # library for magic pipeline operator :D
 library(magrittr)
-
 # library for subplots
 library(cowplot)
-
 # library for european geospatial data ressources
 library(eurostat)
-
 # library for plotting geospatial data
 library(sf)
-
 # library for using external fonts
 library(showtext)
-
 # library for additional color-map
 library(viridis)
+# library for wordclouds
+library(ggwordcloud)
+# library for handling the dtms
+library(slam)
 
+# add google font lato
 font_add_google('Lato', 'lato')
 theme_set(theme_light(base_family = 'lato', base_size = 20))
 showtext_auto()
-
 knitr::opts_chunk$set(echo = TRUE,fig.align = 'center', warning=F, message=F, eval = T)
-
 ```
 
 
@@ -53,48 +49,36 @@ corresponding policies differ between the two countries. This is to see, whether
 
 ```{r}
 limits <-  as.Date(c('2020-01-01', '2020-12-31'))
-
+# read the timeline data from the csv-file
+timeline_data <- read.csv('./../data/timeline_data.csv') %>%
+  mutate(start = as.Date(start, format = "%Y-%m-%d"),
+         end = as.Date(end, format = "%Y-%m-%d"))
 # determine range of events
 event_range <- timeline_data %>% select(event) %>% range()
-
 # build color map depending on the range of events
 color_map <- rev(viridis(event_range[2]+1))
-
 # add column color and event for specific policy and corresponding policy
 timeline_data %<>% mutate(color = color_map[as.integer(event)+4]) %>%
                    mutate(event = as.character(event))
-
 # build time line plot for the Restriction of gatherings policy
 time_line_plot <- ggplot(timeline_data, aes(x=start, xend=end, y=group, yend=group, color=event)) +
   geom_segment(size=10,) +
   scale_color_manual(labels=c('no restrictions', 'above 1000 people','101-1000 people', '11-100 people', '10 people or less'), values = color_map) +
   labs(x = 'Date', y = 'Country',
        colour="Restrictions on\n gatherings") +
-  scale_x_date(limits = limits) 
+  scale_x_date(limits = limits)
 ```
 
 After having the policy time line for Germany and Sweden the time-series for the 
 normalized new cases gets added:
 ```{r}
-# retrieve covid data from covid.ourworldindata.org git repository
-covid_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
-
-# filter for Germany and Sweden data and select location, date and smoothed new
-# cases per million
-covid_data %<>% filter(location=='Sweden' | location=='Germany') %>%
-          select(location, date,
-                 new_cases_smoothed_per_million) %>% # select columns of interest
-          na.omit() %>% # remove rows with na entries             
-          mutate(date=as.Date(as.character(date),
-                              format = "%Y-%m-%d"))  # save date in date format
-          
-
-
+# read the time-series data from the csv-file
+timeseries_data <- read.csv('./../data/timeseries_data.csv') %>%
+  mutate(date = as.Date(date, format = "%Y-%m-%d")) # change data type to date
 # define colors for time series plot
 COLORS <- c(Germany = "steelblue", Sweden ="darkred")
-
 # build time-series plot
-lineplot <- covid_data %>% ggplot(aes(x = date, y = new_cases_smoothed_per_million,
+lineplot <- timeseries_data %>% ggplot(aes(x = date, y = new_cases_smoothed_per_million,
                    group = location, color = location)) +
   geom_line() +
   scale_color_manual(values = COLORS) +
@@ -105,11 +89,13 @@ lineplot <- covid_data %>% ggplot(aes(x = date, y = new_cases_smoothed_per_milli
   theme(plot.title = element_text(hjust = 0.5,face = 'bold'))
 ```
 
+We plot the data as subplots by the cowplot library:
 ```{r, fig.cap='Time-series of smoothed new cases and restrictions on gatherings.'}
 plot_grid(lineplot, time_line_plot,
           ncol = 1, align='v')
 
 ```
+
 
 After cleaning the data and building the plot, we retrieve a subplot
 consisting of a time series of the smoothed new cases per million of COVID-19 
@@ -142,16 +128,15 @@ The first aspect we found interesting, was the amount of articles over time.
 Since we expect a coupling of case numbers and number of articles, we'll try to compare those. To make the comparison easier, we'll scale all values so that the relative maximum in the time frame is set to 100%. Due to rate limiting, we do only have article counts until the end of November.
 
 ```{r, fig.cap='Total amount of articles per day concerning the respective other country are displayed as points, the seven-day moving gaussian average of the amount is depicted by the dark blue line. The dashed lines depict the case numbers per 1.000.000 Inhabitants.'}
-
 sentiment_time_series <-
-  read_rds('./../data/documents_with_sentiments.rds') %>%
-  mutate(publish_date = lubridate::as_date(as.Date(publish_date))) %>%
+  read_rds('./../data/documents_with_sentiments.rds') %>% # import data
+  mutate(publish_date = lubridate::as_date(as.Date(publish_date))) %>% # fix dates
   group_by(country, publish_date) %>%
-  summarise(`number of articles` = n()) %>%
+  summarise('number of articles' = n()) %>% # summarise data
   ungroup() %>%
   group_by(country) %>%
   group_split() %>%
-  map(~mutate(., across(where(is.numeric), ~ 100 * . / max(.)))) %>% 
+  map(~mutate(., across(where(is.numeric), ~ 100 * . / max(.)))) %>% # scale all data to a max of 100% 
   map_dfr( ~ mutate(., across(
     where(is.numeric),
     ~ stats::filter(., filter = dnorm(seq(-2, 2, length.out = 7)) /
@@ -159,8 +144,8 @@ sentiment_time_series <-
                         seq(-2, 2, length.out = 7)
                       ))),
     .names = 'filter_{.col}'
-  ))) %>%
-  rename('original_number of articles' = 'number of articles') %>%
+  ))) %>% # add a column with gaussian low-pass filtered data
+  rename('original_number of articles' = 'number of articles') %>% # nicer names
   pivot_longer(
     cols = where(is.numeric),
     values_to = 'value',
@@ -168,38 +153,33 @@ sentiment_time_series <-
     names_sep = '_'
   ) %>%
   pivot_wider(names_from = quality,
-              values_from = value)
+              values_from = value) # rejig to have a nicer format for the plot
   
-
-
-covid_data %<>% 
+timeseries_data %<>% 
   group_by(location) %>% 
   group_split() %>% 
-  map_dfr(~mutate(., cases = 100 * new_cases_smoothed_per_million/max(new_cases_smoothed_per_million)))
+  map_dfr(~mutate(., cases = 100 * new_cases_smoothed_per_million/max(new_cases_smoothed_per_million))) # scale incidence data to a max of 100% 
 
 
 article_timeseries_viz <- 
   sentiment_time_series %>% 
   mutate(country = recode(country,
                           Germany = 'German news \n about Sweden',
-                          Sweden = 'Swedish news \n about Germany')) %>% 
+                          Sweden = 'Swedish news \n about Germany')) %>% # nicer facet-names
   ggplot(aes(x = publish_date, y = original)) +
-  geom_point(color = scales::muted('blue'), alpha = .1) +
-  geom_line(aes(y = filter), color = scales::muted('blue')) +
-  facet_grid(rows = vars(country),scales = 'fixed') +
-  geom_line(data = covid_data, aes(y = cases, x = date, color = location)) +
-  scale_color_manual(values = COLORS) +
-  theme(legend.position = 'bottom',
+  geom_point(color = scales::muted('blue'), alpha = .1) + # add the article counts per day
+  geom_line(aes(y = filter), color = scales::muted('blue')) + # add the smoothed article counts
+  facet_grid(rows = vars(country),scales = 'fixed') + # display in facets
+  geom_line(data = timeseries_data, aes(y = cases, x = date, color = location)) + # add incidence
+  scale_color_manual(values = COLORS) + # use colors from earlier
+  theme(legend.position = 'bottom', # legend to bottom
         plot.title = element_text(hjust = 0.5,face = 'bold')) +
-  labs(x = 'Date of Publication', 
+  labs(x = 'Date of Publication',  # nicer axis and plot title
        y = 'New cases and articles in % of Maximum',
        color = 'New Covid-19 cases:',
        title = 'News articles and new cases in Sweden and Germany') +
-  scale_x_date(limits = as.Date(c('2020-01-01', '2020-11-20')))
-
-
+  scale_x_date(limits = as.Date(c('2020-01-01', '2020-11-20'))) # limit dates
 article_timeseries_viz
-
 ```
 By comparing these time-series with the infection-rates, one can recognize signs of a similarity in the number of German mentions of Sweden and Corona and the amount of cases in Sweden. Since the amount of articles seems to loosely be coupled to the amount of cases in the respective other country, we will look at the content of these reports. It seems interesting, whether these reports are purely factual, or if some emotional loading can be detected.
 
@@ -212,7 +192,7 @@ So let's first load the data and the countries' outlines:
 
 
 ```{r}
-sf_data <- get_eurostat_geospatial(resolution = '10',
+sf_data <- get_eurostat_geospatial(resolution = '10', # get the nice looking european geo data
                                    nuts = 3) %>%
   filter(CNTR_CODE %in% c('SE')) %>%
   bind_rows(get_eurostat_geospatial(resolution = '10',
@@ -220,82 +200,79 @@ sf_data <- get_eurostat_geospatial(resolution = '10',
               filter(CNTR_CODE %in% c('DE'))) %>% 
   mutate(NAME_LATN = str_to_lower(NAME_LATN))
 
-
-se_countrycodes <- read_tsv('https://www.iso.org/obp/ui/#iso:code:3166:SE')
-
+se_countrycodes <- read_tsv('https://www.iso.org/obp/ui/#iso:code:3166:SE') # get the country codes
 
 regional_sents <- read_rds('./../data/documents_with_sentiments.rds') %>% 
   group_by(country) %>% 
   group_split() %>% 
-  map_dfr(~group_by(.,pub_state,country) %>%  summarise(sentiment = mean(m_sentiment)))
-
+  map_dfr(~group_by(.,pub_state,country) %>%  
+            summarise(sentiment = mean(m_sentiment))) # get the sentiments per state
 ```
 
 
 Now we need to cross-reference the Mediacloud countrycodes (ISO 3166:SE, ISO 3166:DE) with the `eurostat` ones:
 
 ```{r}
-iso_3166 <- read_csv('./../data/regional_codes.csv') %>% 
+iso_3166 <- read_csv('./../data/regional_codes.csv') %>%  # add regional codes to make data sets joinable
   mutate(across(everything(), ~str_trim(.)))%>% 
   mutate(Provinz = str_to_lower(Provinz))
 
-
 regional_sents %<>%
-  right_join(iso_3166, by = c(pub_state = 'Code'))
+  right_join(iso_3166, by = c(pub_state = 'Code')) # and join
 ```
 
 This dataset can now be used to depict the overall regional sentiment in both countries:
 
 ```{r, fig.cap='Mean sentiment per region as detected in the mainstream-news articles about the respective other country.'}
-reg_sent_plot <- function(data,legend){
+reg_sent_plot <- function(data,legend, title = ''){ # function to plot regional sentiments
   p <- ggplot(data) +
     geom_sf(aes(geometry = geometry,fill = sentiment), color = 'grey', expand = F) +
     scale_fill_gradient2(low = scales::muted('red'), 
                          mid = 'white',
                          high = scales::muted('blue'),
                          na.value = 'lightgrey',
-                         limits = c(-5,5))  +
-    cowplot::theme_map()
+                         limits = c(-5,5))   +
+    theme_void()
     if(!legend){
       p <- p + theme(legend.position = 'none')
     }else{
       p <- p + theme_void() + theme(legend.position = 'right')
     }
   p +
-    coord_sf(crs = st_crs("+proj=merc"))
+    coord_sf(crs = st_crs("+proj=merc")) +
+    labs(title = title) +
+    theme(plot.title = element_text(hjust = 0.5,face = 'bold'),
+          panel.border = element_rect(color = 'white',
+                                      size = 1,
+                                      fill = NA))
 }
 
 plots <- sf_data %>% 
   left_join(regional_sents[,c('Provinz', 'sentiment')],by = c('NAME_LATN' = 'Provinz')) %>% 
   group_by(CNTR_CODE) %>%
-  group_split() %>%
-  purrr::map(~reg_sent_plot(.,legend = F))
+  group_split() %>% # split for two plots
+  list(df = ., titles = c('Germany about Sweden', 'Sweden about Germany')) %>%  # change to nested list for pmap
+  pmap(~reg_sent_plot(..1,legend = F,title = ..2)) # build list of plots
 
-legend <- cowplot::get_legend(reg_sent_plot(mutate(sf_data,sentiment = 0),legend = T))
-
+legend <- cowplot::get_legend(reg_sent_plot(mutate(sf_data,sentiment = 0),legend = T)) # generate legend
 
 cowplot::plot_grid(
-  cowplot::plot_grid(plotlist = plots,
-                     labels = c('Germany about Sweden', 'Sweden about Germany')),
+  cowplot::plot_grid(plotlist = plots),
   legend,
   rel_widths =  c(4,.6)
 )
-
-
  
 ```
 
 
-Since the sentiments are not really the way we would like it, a qualitative approach has to make do. We decided to create some wordclouds to get a better impression of the reports' tonality.
+Since the resulting sentiments are really unexpected, we'll try a qualitative approach.
+We decided to create some wordclouds to get a better impression of the reports' tonality.
 
 
-```{r, fig.cap='Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated.'}
-
+```{r, eval = F}
 wc_data <- read_rds('./../data/wordcloud_data.rds')
-
-
-wordcloud <- function(wc_data,country){
-  require(ggwordcloud)
+wordcloud <- function(wc_data,country, title){
+  # generate temp. masks for wordclouds
   p <- get_eurostat_geospatial(resolution = '10',
                                    nuts = 0) %>%
     filter(CNTR_CODE %in% c(country)) %>% 
@@ -303,36 +280,99 @@ wordcloud <- function(wc_data,country){
     geom_sf(fill = 'black', color = 'black') +
     coord_sf(crs = st_crs("+proj=moll")) +
     theme_void()
+  
   ggsave('temp.png', plot = p)
+  
   img <- png::readPNG('temp.png')
+  
   dummy <- colSums(img[,,1]) != max(colSums(img[,,1]))
   img <- img[,dummy,]
   dummy <- rowSums(img[,,1]) != max(rowSums(img[,,1]))
-  img <- img[dummy,,]
+  img <- img[dummy,,] # cut the image to size
   
   wc <- ggplot(wc_data,aes(label = translation, size = n, color = sentiment)) + 
-    geom_text_wordcloud(mask = img,rm_outside = T)+
+    geom_text_wordcloud(mask = img,rm_outside = T) +
     scale_color_gradient2(low = scales::muted('red'), 
                          mid = 'grey',
                          high = scales::muted('blue'),
                          na.value = 'darkgrey',
-                         limits = c(-5,5))
-  file.remove('temp.png')
+                         limits = c(-5,5)) +
+    labs(title = title) +
+    theme_void(base_family = 'lato', base_size = 20) + 
+    theme(plot.title = element_text(hjust = 0.5,face = 'bold')) # plot the image
+  
+  file.remove('temp.png') # remove the temp. mask
+  
   wc
 }
  
 ger_wc <- wc_data %>% 
   filter(country == 'Germany') %>% 
   arrange(desc(n)) %>% 
-  head(500) %>%
-  wordcloud(country = 'DE')
-
+  head(750) %>%
+  wordcloud(country = 'DE',
+            title = 'Germany about Sweden')
 swe_wc <- wc_data %>% 
   filter(country == 'Sweden') %>% 
   arrange(desc(n)) %>% 
-  head(500) %>% 
-  wordcloud(country = 'SE')
+  head(750) %>% 
+  wordcloud(country = 'SE',
+            title = 'Sweden about Germany')
+p <- cowplot::plot_grid(ger_wc,grid::rectGrob(gp = grid::gpar(lwd = 0)), swe_wc, rel_widths = c(1,.2,1), nrow = 1)
 
-cowplot::plot_grid(ger_wc, swe_wc)
-
+ggsave('./../imgs/wordclouds.png', p,width = 4, height = 4,units = 'in') # higher resolution
 ```
+
+```{r, echo = F, fig.cap='Most commonly used terms in the mainstream-news reporting about the respective other country. The color codes the sentiment if any could be associated.'}
+knitr::include_graphics('./../imgs/wordclouds.png')
+```
+First of all, the sentiment analysis did not work well. Though a handful of sentimental terms as died, virus, infected, epidemic, disease, debt or hurt have got a sensible sentiment assigned, some words as 'trump' have clearly been misjudged. A lot of the words used in the description of the pandemic are of special vocabulary, such as risk area and special path and were not assigned any sentiment.
+
+Regarding the word-frequencies in the wordclouds, the most used words in German news articles about Sweden have been 'risk area', 'trump', 'tegnell', 'macron' and 'special path'.
+Especially the terms 'risk area' and 'special path' are in the context of the Pandemic of interest. Although the articles seem to not all be exclusively about Sweden, 'risk area' and 'special path' are two distinct phrases that show the tonality of the reports about Sweden.
+
+The Swedish news articles about Germany in the contrary used 'sweden', 'denmark', 'german' and 'europe' the most, which shows that Germany was rather mentioned in a European context then on it's own. Other than the German wordcloud, the Swedish one mentions more pandemic specific words such as 'died', 'virus', 'infected', 'epidemic', 'disease', 'debt' or 'hurt'. This could also be a result of our  rather radical cleaning though, since the high TF-IDF-cutoff could have led to the removal of pandemic-specific terminology that was mentioned in nearly every German article.
+
+Just looking at the German terms before the cleaning and translation shows a different result:
+
+```{r, fig.cap='Most commonly used terms in the German mainstream-news reporting about Sweden before filtering and translation.'}
+
+german_dtm <- read_rds('./../data/german_dtm.rds') # non-cleaned terms
+
+p <- get_eurostat_geospatial(resolution = '10',
+                                   nuts = 0) %>%
+    filter(CNTR_CODE %in% c('DE')) %>% 
+    ggplot() +
+    geom_sf(fill = 'black', color = 'black') +
+    coord_sf(crs = st_crs("+proj=moll")) +
+    theme_void()
+  
+  ggsave('temp.png', plot = p)
+  
+  img <- png::readPNG('temp.png')
+  
+  dummy <- colSums(img[,,1]) != max(colSums(img[,,1]))
+  img <- img[,dummy,]
+  dummy <- rowSums(img[,,1]) != max(rowSums(img[,,1]))
+  img <- img[dummy,,] # cut the image to size
+
+
+tibble(words = german_dtm$dimnames$cols,
+                 n = col_sums(german_dtm)) %>%
+  arrange(desc(n)) %>% 
+  head(1000) %>% 
+  ggplot(aes(label = words, size = n)) + 
+    geom_text_wordcloud(mask = img,rm_outside = T, color = 'darkgrey') +
+  theme_void() +
+  labs(title = 'Words used by German newspapers') +
+  theme(plot.title = element_text(hjust = 0.5,face = 'bold'))
+
+
+  
+file.remove('temp.png') # remove the temp. mask
+```
+
+The cleaning has removed a good portion of pandemic-specific terms as 'coronavirus', 'infektion', 'covid' and 'pandemi'. We conducted the step for a reason though, the aim was to be able to improve the discrimination between topical clusters. As can also be seen by the non-cleaned wordcloud, the procedure did also remove meaningless terms like 'dass' and 'mehr'. So though our approach was meant in the right way, we went a bit too far.
+
+
+

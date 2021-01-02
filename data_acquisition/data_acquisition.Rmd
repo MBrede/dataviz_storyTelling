@@ -97,7 +97,7 @@ save(list = ls(),file = './../data/pre_steps.RData')
 ```
 
 
-## Data Collection
+## News Articles
 
 We then use the collections to query the API for the matrices and the stories' metadata. To do this, we first build our query-function using `httr`:
 
@@ -206,7 +206,8 @@ german_stories <- weeks %>%
 load('./../data/collected_data.RData')
 ```
 
-## Combining the results {.tabset}
+
+### Combining the results
 
 The first step in processing the data is to remove all empty lists that indicate weeks with no articles whatsoever. This can be achieved with a simple filter:
 
@@ -220,7 +221,7 @@ swedish_stories %<>% .[which(map_lgl(.,  ~ length(.) > 1))]
 We then need to do some processing to end up with the datasets that we need.
 Since we used forked processing to gather our data, we have to combine it. The aim is to end up with four objects; one meta-tibble and one document-term matrix for each country.
 
-### Meta-data
+#### Meta-data
 
 To aggregate our meta-datasets we first need to define a few helper-functions which mostly do a bit of cleaning since the resulting data-frames are a bit in-consistent.
 
@@ -250,7 +251,7 @@ swedish_meta <- swedish_stories %>%
 
 ```
 
-### Document-Term-Matrices
+#### Document-Term-Matrices
 
 To combine the triplet-matrices, we need to define some helpers again. A simple row-binding of the matrices would not do, since every set of articles will have a separate set of words.
 
@@ -328,12 +329,12 @@ write_rds(nth(swedish_doc_term,2),
 ```
 
 
-## Pre-processing for the text visualisations
+### Pre-processing for the text visualisations
 
 To end up with some nice and sensible results, we need to do some additional text-cleaning.
 The first step is to remove all unnecessary words, since there are a lot of 'filler-words' that are useful for the reader but useless for our visualisations.
 
-As usual, we start by defining a helper-function to do our cleaning. We went with quite a radical solution, removing all words shorter than 4 symbols, all character strings with non-letter contents and a high cut-off for the term frequency - inverse document frequency value, a value indicating how important each word is to individual documents in the corpus. This indicator is the product of the average term-frequency $$tf_t = {1\over N_d}\sum_{d=1}^{N_d} tf_{t, d}$$ where $N_d$ is the total amount of documents in the corpus and  $$tf_{t, d} = {f_{t,d}\over{\sum_{i=1}^{N_t}f_{i, d}}}$$ where $t$ is a given term, $N_t$ is the total number of terms in the corpus and $f_{t,d}$ is the frequency of a given term in a given document with the inverse document frequency $$idf_{t,D} = \log{ {N_d}\over{|\{d \in D : t \in d\}|}}$$ where  $|\{d \in D : t \in d\}|$ is the number of documents that mention the respective term at least once.
+As usual, we start by defining a helper-function to do our cleaning. We went with quite a radical solution, removing all words shorter than 4 symbols, all character strings with non-letter contents and a high cut-off for the term frequency - inverse document frequency value, a value indicating how important each word is to individual documents in the corpus. This indicator is the product of the average term-frequency $$tf_t = {1\over N_d}\sum_{i=1}^{N_d} tf_{t, i}$$ where $N_d$ is the total amount of documents in the corpus and  $$tf_{t, d} = {f_{t,d}\over{\sum_{i=1}^{N_t}f_{i, d}}}$$ where $t$ is a given term, $N_t$ is the total number of terms in the corpus and $f_{t,d}$ is the frequency of a given term in a given document with the inverse document frequency $$idf_{t,D} = \log_{10}{ {N_d}\over{|\{d \in D : t \in d\}|}}$$ where  $|\{d \in D : t \in d\}|$ is the number of documents that mention the respective term at least once.
  
 
 ```{r, eval = T}
@@ -348,7 +349,7 @@ remove_stoppers <- function(dtm, language = 'german'){
   
   dtm %<>% .[,log_idx]
   
-  TF_IDF <-  tapply(dtm$v/row_sums(dtm)[dtm$i], dtm$j, mean) *  log(dtm$nrow/col_sums(dtm > 0))
+  TF_IDF <-  tapply(dtm$v/row_sums(dtm)[dtm$i], dtm$j, mean) *  log10(dtm$nrow/col_sums(dtm > 0))
   dtm %<>% .[,TF_IDF > 1.75 * median(TF_IDF)] #arbitrary cutoff
   dtm
 }
@@ -363,7 +364,7 @@ swedish_dtm <- read_rds('./../data/swedish_dtm.rds') %>%
 german_dtm <- read_rds('./../data/german_dtm.rds') %>% 
   remove_stoppers(language = 'german')
 ```
-## Sentiments{.tabset}
+## Sentiments {.tabset}
 
 For the third of our visualisations, we now need to determine the sentiment for the terms left in our corpus. 
 
@@ -424,7 +425,7 @@ ger_sent %>%
 ```
 
 
-## Translation
+### Translation
 
 ```{r, include= F, eval = F}
 save(german_word_freq, swedish_word_freq, file = './../data/word_freqs.RData')
@@ -524,7 +525,7 @@ DT::datatable(swe_translated)
 
 Unfortunately, the quality of the translation is quite inconsistent. To tackle that, we conducted a manual correction of the 250 most common terms in Excel.
 
-## Finnishing up
+### Finnishing up
 
 The last step is to
 
@@ -580,7 +581,7 @@ skimr::skim(ungroup(swe_sent))
 
 ```
 
-## Merging and exporting the final sets
+### Merging and exporting the final sets
 
 For the two visualisations we had in mind we'll need two data sets. 
 
@@ -642,7 +643,7 @@ bind_rows(ger_part, swe_part) %>%
 ```
 
 
-## Case and policy data
+## Policy data
 For attaining the COVID-19 policy data we read the data from the github of the
 [Coronavirus Government Response Tracker Project](https://www.bsg.ox.ac.uk/research/research-projects/coronavirus-government-response-tracker#data).
 
@@ -656,11 +657,10 @@ For the meanings of specific policies take a look on the [Codebook](https://gith
 A function for the data pre-filtering:
 ```{r}
 # a function for pre filtering
-
 filtering <- function(country_name, policy_filter) {
    policies_ger <- policies %>%
                 filter(CountryName==country_name) %>% # filter policies by germany
-                select(policy_filter) %>% # select policies of interest
+                select(any_of(policy_filter)) %>% # select policies of interest
                 mutate(Date=as.Date(as.character(Date),
                                     format = "%Y%m%d")) %>% # change date format
                 na.omit() %>% # remove rows with na entries
@@ -677,20 +677,16 @@ build_start_stop_labels <- function(policies, policy, label){
   # get selected policy data
   selected_policy <- policies %>%
                       select(Date, policy)
-
   # build bit-mask for policy changes
   bit_mask <- selected_policy[,policy] -  lag(selected_policy[,policy], n = 1) != 0
-
   # set last entry true (is na because of lag)
   bit_mask[is.na(bit_mask)] <- TRUE
   
   # initialize start and stop list
   start <- c()
   stop <- c()
-
   # initialize a state variable for tracking start position
   start_state <- TRUE
-
   # iterate through rows for finding start and stop positions
   for(row in 1:length(bit_mask)){
     # check whether it's a stop position
@@ -704,7 +700,6 @@ build_start_stop_labels <- function(policies, policy, label){
       start_state <- FALSE
     }
   }
-
   # add last row as stop
   stop <- c(stop, row)
   
@@ -718,18 +713,15 @@ build_start_stop_labels <- function(policies, policy, label){
   return(data.frame(event = events, start = start_date, end = stop_date,
                     group = label))
 }
-
 ```
 
-After that we build the time line plot for the restrictions on gatherings.
+After that we build the time line data for the restrictions on gatherings. And save it for plotting later.
 ```{r}
 # set filter for columns of interest
 policy_filter <- c('CountryCode', 'Date','C4_Restrictions.on.gatherings')
-
 # retrieve policy data for germany and sweden
 policies_ger <- filtering('Germany', policy_filter)
 policies_se <- filtering('Sweden', policy_filter)
-
 # rebuild data into start and stop labels
 timeline_data <- rbind(build_start_stop_labels(policies_ger,
                                                'C4_Restrictions.on.gatherings',
@@ -737,7 +729,27 @@ timeline_data <- rbind(build_start_stop_labels(policies_ger,
                        build_start_stop_labels(policies_se,
                                                'C4_Restrictions.on.gatherings',
                                                'Sweden'))
+# save the data as an csv-file
+write.csv(timeline_data, './../data/timeline_data.csv')
 ```
 
+## Incidence data
+
+Finally, we'll collect the incidences over time to compare to our other variables:
+
+```{r collect covid, eval = F}
+# retrieve covid data from covid.ourworldindata.org git repository
+timeseries_data <- read.csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
+# filter for Germany and Sweden data and select location, date and smoothed new
+# cases per million
+timeseries_data %<>% filter(location=='Sweden' | location=='Germany') %>%
+          select(location, date,
+                 new_cases_smoothed_per_million) %>% # select columns of interest
+          na.omit() %>% # remove rows with na entries             
+          mutate(date=as.Date(as.character(date),
+                              format = "%Y-%m-%d"))  # save date in date format
+# save the data as an csv-file
+write.csv(timeseries_data, './../data/timeseries_data.csv')
+```
 
 <!-- ## References -->
