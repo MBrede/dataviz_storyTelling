@@ -1,6 +1,4 @@
 
-mc_key <- 'b5855902a85df2c10aa24712f6e0e972b476d800f31387a84f5661fab880e53e'
-
 load('/home/brede/fh_nextcloud/Data Science/dataViz/covid_story/data/pre_steps.RData') 
 
 library(httr)
